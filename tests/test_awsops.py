@@ -41,8 +41,11 @@ def test_iam_policy_no_wildcard_except_create():
         has_star = res == "*" or (isinstance(res, list) and "*" in res)
         if has_star:
             for a in st["Action"]:
-                assert a == "sts:GetCallerIdentity" or a.startswith("cloudfront:Create"), \
-                    f"étoile interdite pour {a} (Sid {st['Sid']})"
+                assert (
+                    a == "sts:GetCallerIdentity"
+                    or a.startswith("cloudfront:Create")
+                    or a.startswith("acm:")
+                ), f"étoile interdite pour {a} (Sid {st['Sid']})"
 
 
 def test_cloudformation_template_present():
@@ -63,7 +66,7 @@ def test_cli_registers_all_commands():
     click_cmd = typer.main.get_command(app)
     sub = set(click_cmd.commands.keys())
     for c in ["new", "add", "import", "remove", "list", "album", "headers", "preview",
-              "init", "config", "push", "pull", "destroy", "doctor", "iam-policy"]:
+              "init", "config", "push", "pull", "domain", "destroy", "doctor", "iam-policy"]:
         assert c in sub, c
 
 
@@ -153,3 +156,75 @@ def test_iam_policy_has_destroy_permissions():
     for needed in ("s3:DeleteBucketPolicy", "s3:DeleteBucket",
                    "cloudfront:DeleteDistribution", "cloudfront:GetDistributionConfig"):
         assert needed in actions, needed
+
+
+def test_iam_policy_has_acm_permissions():
+    """gallery domain : ACM (us-east-1) pour le certificat du domaine perso."""
+    actions = {a for st in awsops.iam_policy()["Statement"] for a in st["Action"]}
+    for needed in ("acm:RequestCertificate", "acm:DescribeCertificate",
+                   "acm:ListCertificates", "acm:DeleteCertificate"):
+        assert needed in actions, needed
+
+
+def test_template_has_domain_support():
+    tpl = awsops.load_template()
+    for token in ("DomainName", "AcmCertificateArn", "ViewerCertificate",
+                  "CloudFrontDefaultCertificate", "sni-only"):
+        assert token in tpl, token
+
+
+def test_is_apex():
+    assert awsops.is_apex("example.com") is True
+    assert awsops.is_apex("photos.example.com") is False
+
+
+def test_set_domain_reuses_cert_and_updates_stack(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+    from bookphoto import config as cfg
+
+    monkeypatch.chdir(tmp_path)
+    domain = "photos.example.com"
+    arn = "arn:aws:acm:us-east-1:1:certificate/abc"
+
+    acm = MagicMock()
+    pag = MagicMock()
+    pag.paginate.return_value = [{"CertificateSummaryList": [
+        {"DomainName": domain, "CertificateArn": arn}]}]
+    acm.get_paginator.return_value = pag
+    acm.describe_certificate.return_value = {"Certificate": {"Status": "ISSUED"}}
+
+    cf = MagicMock()
+    cf.describe_stack_events.return_value = {"StackEvents": []}
+    cf.describe_stacks.return_value = {"Stacks": [{
+        "StackStatus": "UPDATE_COMPLETE",
+        "Outputs": [{"OutputKey": "DomainName", "OutputValue": "d.cloudfront.net"}],
+    }]}
+
+    clients = {"acm": acm, "cloudformation": cf}
+    sess = MagicMock()
+    sess.client.side_effect = lambda name, region_name=None: clients[name]
+    monkeypatch.setattr(awsops, "_session", lambda profile=None: sess)
+
+    conf = cfg.AppConfig(region="eu-west-1", bucket="b", distribution_id="D", stack="bookphoto-x")
+    msgs: list[str] = []
+    awsops.set_domain(conf, domain, progress=msgs.append)
+
+    # certificat reutilise (pas de request_certificate), stack mise a jour avec les bons params
+    acm.request_certificate.assert_not_called()
+    kwargs = cf.update_stack.call_args.kwargs
+    pmap = {p["ParameterKey"]: p for p in kwargs["Parameters"]}
+    assert pmap["DomainName"]["ParameterValue"] == domain
+    assert pmap["AcmCertificateArn"]["ParameterValue"] == arn
+    assert pmap["BucketName"]["UsePreviousValue"] is True
+    saved = cfg.load_config()
+    assert saved.domain == domain and saved.certificate_arn == arn
+
+
+def test_set_domain_rejects_apex(monkeypatch, tmp_path):
+    import pytest
+    from bookphoto import config as cfg
+
+    monkeypatch.chdir(tmp_path)
+    conf = cfg.AppConfig(region="eu-west-1", bucket="b", distribution_id="D", stack="bookphoto-x")
+    with pytest.raises(RuntimeError, match="apex"):
+        awsops.set_domain(conf, "example.com")

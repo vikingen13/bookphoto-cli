@@ -1,7 +1,7 @@
 """CLI de bookphoto (``gallery``). Un site = le dossier courant.
 
-Commandes : init, config, new, album, add, remove, list, push, pull, doctor, iam-policy.
-Toutes agissent sur le repertoire courant.
+Commandes : init, config, new, album, headers, add, import, remove, list, preview,
+push, pull, domain, destroy, doctor, iam-policy. Toutes agissent sur le repertoire courant.
 """
 
 from __future__ import annotations
@@ -494,6 +494,60 @@ def pull(
     if conf.url:
         console.print(f"URL : [bold]{conf.url}[/bold]")
     console.print("[dim]Le site est pret : edite puis 'gallery push'.[/dim]")
+
+
+@app.command()
+def domain(
+    name: Optional[str] = typer.Argument(None, help="Sous-domaine (ex. photos.example.com). Sans argument : affiche l'etat."),
+    clear: bool = typer.Option(False, "--clear", help="Retirer le domaine perso (retour au domaine cloudfront.net)."),
+) -> None:
+    """Associer un domaine perso a la distribution (certificat ACM us-east-1 + alias CloudFront).
+
+    'gallery domain photos.example.com' configure · 'gallery domain' affiche · 'gallery domain --clear' retire.
+    Le DNS n'est PAS gere par bookphoto : les enregistrements a poser dans ta zone sont affiches.
+    """
+    from . import awsops
+
+    _require_site()
+    conf = cfg.load_config()
+    if not conf.is_provisioned:
+        console.print("[red]Site non provisionne. Lance 'gallery init'.[/red]")
+        raise typer.Exit(1)
+
+    if clear:
+        if not conf.domain:
+            console.print("[yellow]Aucun domaine perso a retirer.[/yellow]")
+            raise typer.Exit(0)
+        old = conf.domain
+        try:
+            awsops.clear_domain(conf, progress=lambda m: console.print(f"  [dim]{m}[/dim]"))
+        except Exception as exc:  # noqa: BLE001
+            console.print(f"[red]Echec : {exc}[/red]")
+            raise typer.Exit(1)
+        console.print("[green]Domaine retire.[/green] Le site est de nouveau servi sur son domaine cloudfront.net.")
+        console.print(f"[yellow]Pense a supprimer le CNAME[/yellow] [bold]{old}[/bold] de ta zone DNS.")
+        return
+
+    if name is None:
+        if conf.domain:
+            console.print(f"Domaine perso : [bold]{conf.domain}[/bold]")
+            console.print(f"[dim]Certificat : {conf.certificate_arn}[/dim]")
+        else:
+            console.print("[dim]Aucun domaine perso.[/dim] Configure-en un : "
+                          "[bold]gallery domain photos.example.com[/bold]")
+        return
+
+    try:
+        awsops.set_domain(conf, name, progress=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Echec : {exc}[/red]")
+        raise typer.Exit(1)
+    conf = cfg.load_config()
+    cf_domain = (conf.url or "").replace("https://", "")
+    console.print(f"[green]Domaine configure[/green] : [bold]{conf.domain}[/bold]")
+    console.print("[yellow]Derniere etape — pose ce CNAME dans ta zone DNS :[/yellow]")
+    console.print(f"  [bold]{conf.domain}[/bold]  CNAME  [bold]{cf_domain}[/bold]")
+    console.print(f"[dim]Une fois propage : https://{conf.domain}  (utilisateur « {AUTH_USER} »).[/dim]")
 
 
 @app.command()

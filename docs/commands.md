@@ -169,6 +169,23 @@ KeyValueStore.
 
 ---
 
+## `domain`
+
+```bash
+gallery domain photos.example.com    # attach a custom subdomain
+gallery domain                       # show the current domain / cert
+gallery domain --clear               # detach (back to cloudfront.net)
+```
+
+Associates a custom **subdomain** with the distribution. Requests (or reuses) a DNS-validated
+**ACM certificate in `us-east-1`** (CloudFront requirement), then attaches the alias + cert to
+CloudFront. bookphoto **does not manage DNS**: it prints the records to add to your zone — the
+**validation CNAME**, then the final `photos.example.com CNAME dxxxx.cloudfront.net`. Apex
+domains aren't supported (use a subdomain). `--clear` reverts and keeps the ACM cert (free,
+reusable; removed by `destroy`).
+
+---
+
 ## `destroy`
 
 ```bash
@@ -188,7 +205,8 @@ gallery doctor
 ```
 
 **Read-only** diagnostics: AWS credentials, infra provisioned, bucket private, distribution
-deployed.
+deployed. If a custom domain is set, also checks the ACM certificate (`ISSUED`) and the
+CloudFront alias.
 
 ---
 

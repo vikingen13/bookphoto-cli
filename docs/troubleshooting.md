@@ -63,6 +63,22 @@ cache.
   the stack `bookphoto-<slug(name)>`. Check the spelling of the name.
 - Pass `--region`/`--profile` if the gallery isn't in the default region/account.
 
+## Custom domain
+
+- **Certificate stuck in `PENDING_VALIDATION`**: the DNS **validation CNAME** printed by
+  `gallery domain` isn't in your zone yet, or hasn't propagated. Add it exactly as shown
+  (name + value), then wait — ACM validates automatically. `gallery doctor` shows the cert
+  status.
+- **"ressemble a un domaine apex"**: you passed a bare domain (`example.com`). Use a
+  **subdomain** (`photos.example.com`) — a bare apex can't be a CNAME.
+- **Site not reachable on the custom domain**: after the cert is `ISSUED` and the stack
+  updated, add the final `photos.example.com CNAME dxxxx.cloudfront.net` to your zone (printed
+  by the command). Give CloudFront a minute to redeploy.
+- **The cert must be in `us-east-1`** — bookphoto handles that for you; if you create one by
+  hand for CloudFront, it must be there.
+- **Revert**: `gallery domain --clear` detaches the alias (back to cloudfront.net); remove the
+  CNAME from your zone yourself. The ACM cert is kept (reusable) and cleaned up by `destroy`.
+
 ## destroy fails (DELETE_FAILED)
 
 - Message `s3:DeleteBucketPolicy ... not authorized` (or another `Delete*` action): the role

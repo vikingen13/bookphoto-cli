@@ -47,6 +47,8 @@ class AppConfig:
     password: str | None = None
     stack: str | None = None
     kvs_arn: str | None = None
+    domain: str | None = None
+    certificate_arn: str | None = None
 
     @property
     def is_provisioned(self) -> bool:
@@ -65,6 +67,8 @@ def load_config() -> AppConfig:
         password=data.get("password"),
         stack=data.get("stack"),
         kvs_arn=data.get("kvs_arn"),
+        domain=data.get("domain"),
+        certificate_arn=data.get("certificate_arn"),
     )
 
 

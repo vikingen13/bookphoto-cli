@@ -12,6 +12,17 @@ Parameters:
     Default: PriceClass_100
     AllowedValues: [PriceClass_100, PriceClass_200, PriceClass_All]
     Description: Classe de prix CloudFront (100 = le moins cher, edge US/EU).
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Domaine perso (ex. photos.example.com). Vide = domaine cloudfront.net par defaut.
+  AcmCertificateArn:
+    Type: String
+    Default: ""
+    Description: ARN du certificat ACM (us-east-1) couvrant DomainName. Requis si DomainName est defini.
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
 
 Resources:
   Bucket:
@@ -88,6 +99,13 @@ Resources:
         DefaultRootObject: index.html
         PriceClass: !Ref PriceClass
         HttpVersion: http2and3
+        Aliases: !If [HasDomain, [!Ref DomainName], !Ref "AWS::NoValue"]
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref AcmCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         Origins:
           - Id: s3origin
             DomainName: !GetAtt Bucket.RegionalDomainName

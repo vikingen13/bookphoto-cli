@@ -49,8 +49,9 @@ def cache_control(key: str) -> str:
 
 def iam_policy() -> dict:
     """Politique IAM minimale. Regle : pas de ``Resource:"*"`` sauf pour les actions
-    sans ressource (``sts:GetCallerIdentity``) ou de creation ou la ressource n'existe
-    pas encore (``cloudfront:Create*``). Tout le reste est scope aux ARN ``bookphoto-*``.
+    sans ressource (``sts:GetCallerIdentity``, ``acm:ListCertificates``), de creation ou la
+    ressource n'existe pas encore (``cloudfront:Create*``, ``acm:RequestCertificate``).
+    Tout le reste est scope aux ARN ``bookphoto-*``.
     """
     return {
         "Version": "2012-10-17",
@@ -148,6 +149,19 @@ def iam_policy() -> dict:
                     "cloudfront-keyvaluestore:ListKeys",
                 ],
                 "Resource": "arn:aws:cloudfront::*:key-value-store/*",
+            },
+            {
+                "Sid": "AcmCertificates",
+                "Effect": "Allow",
+                "Action": [
+                    "acm:RequestCertificate",
+                    "acm:DescribeCertificate",
+                    "acm:ListCertificates",
+                    "acm:AddTagsToCertificate",
+                    "acm:DeleteCertificate",
+                ],
+                # ACM (us-east-1) : ARN inconnu a la creation + ListCertificates sans ressource.
+                "Resource": "*",
             },
         ],
     }
@@ -500,6 +514,148 @@ def pull(name: str, region: str | None = None, profile: str | None = None,
     return n
 
 
+# --------------------------------------------------------------------------- #
+# domain : domaine perso (certificat ACM us-east-1 + alias CloudFront)
+# --------------------------------------------------------------------------- #
+# CloudFront exige un certificat ACM dans us-east-1, quelle que soit la region du bucket.
+ACM_REGION = "us-east-1"
+
+
+def _acm(profile: str | None = None):
+    return _session(profile).client("acm", region_name=ACM_REGION)
+
+
+def is_apex(domain: str) -> bool:
+    """Heuristique : 2 labels (ex. example.com) => apex, non supporte par un simple CNAME.
+
+    Ne detecte pas les apex a suffixe compose (example.co.uk) : c'est un garde-fou, pas une PSL.
+    """
+    return domain.count(".") < 2
+
+
+def ensure_certificate(domain: str, profile: str | None = None, progress=None) -> str:
+    """Renvoie l'ARN d'un certificat ACM ISSUED pour ``domain`` (us-east-1, validation DNS).
+
+    Reutilise un certificat existant ; sinon en demande un, AFFICHE le CNAME de validation
+    a poser dans la zone DNS (bookphoto ne gere pas le DNS), puis attend jusqu'a ISSUED.
+    """
+    def _say(m):
+        if progress:
+            progress(m)
+
+    acm = _acm(profile)
+    arn = None
+    for page in acm.get_paginator("list_certificates").paginate(
+        CertificateStatuses=["ISSUED", "PENDING_VALIDATION"]
+    ):
+        for c in page.get("CertificateSummaryList", []):
+            if c.get("DomainName") == domain:
+                arn = c["CertificateArn"]
+                break
+        if arn:
+            break
+    if arn:
+        _say(f"Certificat ACM existant reutilise ({arn}).")
+    else:
+        _say(f"Demande d'un certificat ACM pour {domain} (region {ACM_REGION})...")
+        arn = acm.request_certificate(
+            DomainName=domain,
+            ValidationMethod="DNS",
+            Tags=[{"Key": "Project", "Value": "bookphoto"}],
+        )["CertificateArn"]
+
+    # Attendre que l'enregistrement de validation soit disponible, puis l'afficher.
+    printed = False
+    for _ in range(30):
+        cert = acm.describe_certificate(CertificateArn=arn)["Certificate"]
+        if cert["Status"] == "ISSUED":
+            _say("Certificat deja valide (ISSUED).")
+            return arn
+        opts = cert.get("DomainValidationOptions") or []
+        rr = opts[0].get("ResourceRecord") if opts else None
+        if rr:
+            _say("Ajoute cet enregistrement de validation dans ta zone DNS :")
+            _say(f"  {rr['Name']}  {rr['Type']}  {rr['Value']}")
+            printed = True
+            break
+        time.sleep(2)
+    if not printed:
+        _say("Enregistrement de validation pas encore disponible cote ACM — reessaie plus tard.")
+
+    _say("Attente de la validation du certificat (pose le CNAME ci-dessus, la propagation peut prendre quelques minutes)...")
+    while True:
+        cert = acm.describe_certificate(CertificateArn=arn)["Certificate"]
+        status = cert["Status"]
+        if status == "ISSUED":
+            _say("Certificat valide (ISSUED).")
+            return arn
+        if status in ("FAILED", "VALIDATION_TIMED_OUT", "REVOKED"):
+            raise RuntimeError(
+                f"Validation du certificat echouee (statut {status}). "
+                "Verifie que le CNAME de validation est bien pose dans ta zone DNS."
+            )
+        time.sleep(10)
+
+
+def _update_domain_params(conf: cfg.AppConfig, domain_name: str, certificate_arn: str,
+                          progress=None) -> dict:
+    """Met a jour la stack en (dé)branchant l'alias + le certificat sur la distribution."""
+    cf = _session(conf.profile).client("cloudformation", region_name=conf.region)
+    template = load_template()
+    params = [
+        {"ParameterKey": "BucketName", "UsePreviousValue": True},
+        {"ParameterKey": "PriceClass", "UsePreviousValue": True},
+        {"ParameterKey": "DomainName", "ParameterValue": domain_name or ""},
+        {"ParameterKey": "AcmCertificateArn", "ParameterValue": certificate_arn or ""},
+    ]
+    try:
+        seen = {e["EventId"] for e in cf.describe_stack_events(StackName=conf.stack)["StackEvents"]}
+    except cf.exceptions.ClientError:
+        seen = set()
+    try:
+        cf.update_stack(StackName=conf.stack, TemplateBody=template, Parameters=params)
+    except cf.exceptions.ClientError as exc:
+        if "No updates are to be performed" in str(exc):
+            return _stack_outputs(cf, conf.stack)
+        raise
+    status = _wait_stack(cf, conf.stack, seen, progress)
+    if status != "UPDATE_COMPLETE":
+        raise RuntimeError(f"Mise a jour du domaine echouee (statut {status}). Cause affichee ci-dessus.")
+    return _stack_outputs(cf, conf.stack)
+
+
+def set_domain(conf: cfg.AppConfig, domain: str, progress=None) -> dict:
+    """Associe ``domain`` a la distribution : certificat ACM + alias CloudFront (execute AWS)."""
+    domain = (domain or "").strip().lower().rstrip(".")
+    if not domain or " " in domain:
+        raise RuntimeError("Nom de domaine invalide.")
+    if is_apex(domain):
+        raise RuntimeError(
+            f"« {domain} » ressemble a un domaine apex (non servi par un simple CNAME). "
+            f"Utilise un sous-domaine, ex. photos.{domain}."
+        )
+    arn = ensure_certificate(domain, profile=conf.profile, progress=progress)
+    if progress:
+        progress("Mise a jour de la distribution (alias + certificat)...")
+    outputs = _update_domain_params(conf, domain_name=domain, certificate_arn=arn, progress=progress)
+    conf.domain = domain
+    conf.certificate_arn = arn
+    cfg.save_config(conf)
+    return outputs
+
+
+def clear_domain(conf: cfg.AppConfig, progress=None) -> dict:
+    """Retire l'alias + le certificat de la distribution (retour au domaine cloudfront.net).
+
+    Le certificat ACM est LAISSE (gratuit, reutilisable) ; il sera nettoye par ``destroy``.
+    """
+    outputs = _update_domain_params(conf, domain_name="", certificate_arn="", progress=progress)
+    conf.domain = None
+    conf.certificate_arn = None
+    cfg.save_config(conf)
+    return outputs
+
+
 def destroy(conf: cfg.AppConfig, progress=None) -> None:
     """Vide le bucket puis supprime la stack CloudFormation (execute AWS, IRREVERSIBLE)."""
     sess = _session(conf.profile)
@@ -547,7 +703,17 @@ def destroy(conf: cfg.AppConfig, progress=None) -> None:
             raise RuntimeError(f"Suppression de la stack '{stack}' echouee : {status}")
         time.sleep(5)
 
+    # Certificat ACM (us-east-1) : la distribution supprimee, le cert devient supprimable.
+    if conf.certificate_arn:
+        try:
+            _acm(conf.profile).delete_certificate(CertificateArn=conf.certificate_arn)
+            if progress:
+                progress("certificat ACM supprime")
+        except Exception:  # noqa: BLE001 - cert deja absent ou encore reference : sans gravite
+            pass
+
     conf.bucket = conf.distribution_id = conf.url = conf.kvs_arn = conf.stack = None
+    conf.domain = conf.certificate_arn = None
     cfg.save_config(conf)
 
 
@@ -593,5 +759,25 @@ def doctor(conf: cfg.AppConfig) -> list[tuple[str, bool, str]]:
             checks.append(("Distribution deployee", dist["Status"] == "Deployed", dist["Status"]))
         except Exception as exc:  # noqa: BLE001
             checks.append(("Distribution", False, str(exc)))
+
+    if conf.domain:
+        try:
+            cert = _acm(conf.profile).describe_certificate(
+                CertificateArn=conf.certificate_arn
+            )["Certificate"]
+            checks.append(("Certificat ACM", cert["Status"] == "ISSUED",
+                           f"{conf.domain} · {cert['Status']}"))
+        except Exception as exc:  # noqa: BLE001
+            checks.append(("Certificat ACM", False, str(exc)))
+        if conf.distribution_id:
+            try:
+                dc = sess.client("cloudfront").get_distribution(
+                    Id=conf.distribution_id
+                )["Distribution"]["DistributionConfig"]
+                aliases = (dc.get("Aliases") or {}).get("Items") or []
+                checks.append(("Alias CloudFront", conf.domain in aliases,
+                               ", ".join(aliases) or "aucun"))
+            except Exception as exc:  # noqa: BLE001
+                checks.append(("Alias CloudFront", False, str(exc)))
 
     return checks

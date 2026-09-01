@@ -68,6 +68,7 @@ gallery push                       # publish (S3 mirror + password + CloudFront 
 | `preview [--port]` | Local preview (builds the SPA + HTTP server) |
 | `push` | Publish: build + incremental S3 mirror + password + CloudFront invalidation |
 | `pull "<name>"` | Clone an existing gallery from AWS (by **name**) |
+| `domain <sub>` | Attach a custom subdomain (ACM cert + CloudFront alias); `--clear` to revert |
 | `destroy [--yes]` | Tear down this site's AWS infra (empties the bucket + deletes the stack) |
 | `doctor` | Diagnostics (read-only) |
 | `iam-policy` | Print the minimal required IAM policy |
