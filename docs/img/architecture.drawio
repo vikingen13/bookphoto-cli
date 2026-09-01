@@ -1,0 +1,70 @@
+<mxfile host="65bd71144e">
+    <diagram name="bookphoto architecture" id="page-1">
+        <mxGraphModel dx="1426" dy="1067" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="cloud" value="AWS Cloud (your account)" style="sketch=0;outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;container=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;strokeColor=#232F3E;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#232F3E;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="40" width="580" height="610" as="geometry"/>
+                </mxCell>
+                <mxCell id="stack" value="Stack resources&lt;div&gt;deployed by CloudFormation&lt;/div&gt;&lt;div&gt;1 per gallery&lt;/div&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#FCEEF6;strokeColor=#E7157B;dashed=1;fontColor=#E7157B;fontStyle=2;fontSize=11;verticalAlign=top;align=right;spacingRight=10;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="280" width="420" height="330" as="geometry"/>
+                </mxCell>
+                <mxCell id="cf" value="CloudFront&#xa;(HTTPS, OAC)" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="490" width="78" height="78" as="geometry"/>
+                </mxCell>
+                <mxCell id="fn" value="CloudFront Function&#xa;Basic Auth" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront_functions;" parent="1" vertex="1">
+                    <mxGeometry x="637" y="490" width="78" height="78" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" value="S3 bucket&#xa;(private)" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#7AA116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;verticalAlign=middle;align=left;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;labelPosition=right;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="336" width="78" height="78" as="geometry"/>
+                </mxCell>
+                <mxCell id="kvs" value="KeyValueStore&#xa;key: auth" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;verticalAlign=middle;align=left;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;labelPosition=right;" parent="1" vertex="1">
+                    <mxGeometry x="637" y="336" width="78" height="78" as="geometry"/>
+                </mxCell>
+                <mxCell id="cfn" value="CloudFormation&#xa;(stack)" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=middle;verticalAlign=middle;align=left;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudformation;labelPosition=right;" parent="1" vertex="1">
+                    <mxGeometry x="561" y="100" width="78" height="78" as="geometry"/>
+                </mxCell>
+                <mxCell id="owner" value="Owner&#xa;(gallery CLI)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#146EB4;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.user;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="103" width="72" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="visitor" value="Visitor&#xa;(browser)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#232F3E;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=13;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.user;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="490" width="72" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_init" value="gallery init" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;dashed=1;strokeColor=#146EB4;fontColor=#146EB4;fontStyle=1;" parent="1" source="owner" target="cfn" edge="1">
+                    <mxGeometry x="0.236" y="9" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e_deploy" value="deploys stack" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;dashed=1;strokeColor=#E7157B;fontColor=#E7157B;fontStyle=1;" parent="1" source="cfn" target="stack" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_push" value="gallery push" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;dashed=1;strokeColor=#146EB4;fontColor=#146EB4;fontStyle=1;" parent="1" source="owner" target="s3" edge="1">
+                    <mxGeometry x="0.4403" y="15" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="250" y="140"/>
+                            <mxPoint x="250" y="375"/>
+                        </Array>
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e_view" value="&amp;nbsp; HTTPS.&amp;nbsp;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;" parent="1" source="visitor" target="cf" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="136" y="529"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e_s3" value="&lt;span style=&quot;background-color: light-dark(rgb(252, 238, 246), rgb(237, 237, 237));&quot;&gt;OAC · SigV4&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;" parent="1" source="cf" target="s3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_fn" value="&lt;span style=&quot;background-color: light-dark(rgb(252, 238, 246), rgb(237, 237, 237));&quot;&gt;viewer-request&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;" parent="1" source="cf" target="fn" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e_kvs" value="&lt;span style=&quot;background-color: light-dark(rgb(252, 238, 246), rgb(237, 237, 237));&quot;&gt;get &quot;auth&quot;&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=12;" parent="1" source="fn" target="kvs" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

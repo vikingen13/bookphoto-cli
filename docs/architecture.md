@@ -1,94 +1,54 @@
-# Architecture AWS & sécurité
+# AWS architecture & security
 
-## Vue d'ensemble
+## Overview
+
+![bookphoto AWS architecture](img/architecture.png)
 
 ```
-Navigateur ──HTTPS──▶ CloudFront ──(viewer-request)──▶ CloudFront Function ──▶ KeyValueStore
-                          │                                   │  (clé "auth")
-                          │  Origin Access Control (SigV4)     └─ Basic Auth : 401 si KO
-                          ▼
-                      S3 (privé)
+Browser ──HTTPS──▶ CloudFront ──(viewer-request)──▶ CloudFront Function ──▶ KeyValueStore
+                       │                                   │  (key "auth")
+                       │  Origin Access Control (SigV4)     └─ Basic Auth: 401 if wrong
+                       ▼
+                     S3 (private)
 ```
 
-Tout est **statique** : aucun serveur, aucune fonction Lambda côté origine. La galerie est
-une SPA (`index.html` + `data.json`) plus les images (`thumbs/`, `display/`), stockées dans
-un bucket S3 **privé** et distribuées par CloudFront.
+Everything is **static** — no server, no origin Lambda. The gallery (SPA + images) sits in a
+**private** S3 bucket and is delivered by CloudFront. Defined in
+[`../src/bookphoto/aws/infra.yaml`](../src/bookphoto/aws/infra.yaml). Naming: stack
+`bookphoto-<slug(name)>`, bucket `bookphoto-<slug(name)>-<accountId>`.
 
-Infra décrite dans [`../src/bookphoto/aws/infra.yaml`](../src/bookphoto/aws/infra.yaml)
-(CloudFormation). Nommage : stack `bookphoto-<slug(nom)>`, bucket
-`bookphoto-<slug(nom)>-<accountId>`. Tags : `Project=bookphoto`, `Gallery=<slug>`,
-`ManagedBy=bookphoto`.
+## Components
 
-## Composants
+- **S3** — private end to end: all public access blocked, `BucketOwnerEnforced`, AES256. The
+  bucket policy allows `s3:GetObject` **only** to CloudFront, and only for *this* distribution
+  (`AWS:SourceArn`). Nobody else can read it.
+- **Origin Access Control (OAC)** — CloudFront signs its requests to S3 with SigV4.
+- **CloudFront** — HTTPS-only, HTTP/2+3, cheapest price class by default (`PriceClass_100`).
+  403/404 are rewritten to `/index.html` (SPA routing, and no object listing leaks).
+- **KeyValueStore + CloudFront Function** — the access control (see below).
 
-- **S3 (`AWS::S3::Bucket`)** — privé de bout en bout :
-  - `PublicAccessBlockConfiguration` : les 4 blocages activés.
-  - `OwnershipControls: BucketOwnerEnforced` (pas d'ACL).
-  - `BucketEncryption: AES256` (SSE-S3).
-  - Politique de bucket : lecture `s3:GetObject` autorisée **uniquement** au service
-    `cloudfront.amazonaws.com`, et **conditionnée** à l'ARN de *cette* distribution
-    (`AWS:SourceArn`). Personne d'autre ne lit le bucket.
-- **Origin Access Control (OAC)** — CloudFront signe ses requêtes vers S3 en **SigV4**
-  (`SigningBehavior: always`). Remplace l'ancien OAI.
-- **CloudFront Distribution** :
-  - `ViewerProtocolPolicy: redirect-to-https`, `HttpVersion: http2and3`, `Compress: true`.
-  - Cache : managed policy **CachingOptimized**.
-  - `PriceClass` paramétrable (défaut **PriceClass_100** : edges US/EU, le moins cher).
-  - `DefaultRootObject: index.html`.
-  - **Erreurs 403 et 404 → `/index.html`** (code 404) : routage SPA + ne divulgue pas la
-    liste des objets.
-- **KeyValueStore (`AWS::CloudFront::KeyValueStore`)** — stocke la valeur d'auth sous la
-  clé **`auth`**.
-- **CloudFront Function (`cloudfront-js-2.0`, `viewer-request`)** — le contrôle d'accès :
-  lit `auth` dans le KVS et
-  - si la valeur est `-` → **galerie publique** (laisse passer) ;
-  - sinon compare l'en-tête `Authorization` à `Basic <auth>` → laisse passer si égal ;
-  - sinon **401** avec `WWW-Authenticate: Basic realm="Galerie privee"`.
+## Password & security
 
-## Modèle d'authentification
+- **One shared password**, fixed user **`invite`**. The password is written to a CloudFront
+  **KeyValueStore** under the key `auth`, as `base64("invite:<password>")`.
+- On every request, a **CloudFront Function** (`viewer-request`) reads `auth` and:
+  - if the value is `-` → **public gallery** (passes through);
+  - else compares the `Authorization` header to `Basic <auth>` → passes if equal;
+  - else returns **401**.
+- **Fail-closed**: if the KVS is unreadable or empty, access is denied (401).
+- Changing the password is a single write to the KVS (done by `push`/`config`) — **no redeploy**.
 
-- **Utilisateur unique et fixe : `invite`**. Un seul mot de passe partagé.
-- La valeur stockée dans le KVS est `base64("invite:<mot de passe>")` (exactement la partie
-  qui suit `Basic ` dans l'en-tête HTTP). Marqueur spécial `-` = public.
-- **Fail-closed** : si le KVS est illisible ou vide, la Function renvoie 401.
-- Changer le mot de passe = un simple `PutKey` sur le KVS (fait par `push`/`config`),
-  **sans redéploiement** ni invalidation nécessaires pour l'auth.
+**Scope, honestly:** this is access control via a *shared* password, not per-user auth — one
+secret for everyone, no individual accounts or revocation. The password is stored in clear text
+in `.bookphoto.json` (local, **git-ignored** by `init`) — don't commit or share it. Transport
+is HTTPS; the bucket is never exposed directly.
 
-### Portée de sécurité (à connaître)
+## Minimal IAM policy
 
-- « Privé » = **contrôle d'accès par mot de passe partagé**, pas de la confidentialité de
-  niveau militaire. Le Basic Auth protège l'accès HTTP ; il n'y a pas de comptes
-  individuels ni de révocation par personne (un seul secret pour tous).
-- Le mot de passe est stocké **en clair** dans `.bookphoto.json` (config machine locale).
-  Ce fichier est **git-ignoré** par `init`. Ne le committe pas, ne le partage pas.
-- Le transport est chiffré (HTTPS), le bucket n'est **jamais** exposé en direct.
-
-## Politique IAM minimale
-
-`gallery iam-policy` imprime la politique exacte. Principes :
-
-- **Aucun `Resource: "*"`** sauf pour les actions qui n'ont pas de ressource
-  (`sts:GetCallerIdentity`) ou de **création** dont la ressource n'existe pas encore
-  (`cloudfront:Create*`). Tout le reste est **scopé** aux ARN `bookphoto-*`.
-- Blocs : identité STS, CloudFormation (`stack/bookphoto-*`), S3 (`bookphoto-*`),
-  CloudFront création, CloudFront gestion (distribution/function/kvs/OAC), et données
-  KeyValueStore (`PutKey`/`GetKey`…).
-
-Récupérer et appliquer :
+`gallery iam-policy` prints the exact policy. Rule: **no `Resource: "*"`** except for actions
+with no resource (`sts:GetCallerIdentity`) or creation actions whose resource doesn't exist yet
+(`cloudfront:Create*`); everything else is scoped to `bookphoto-*` ARNs.
 
 ```bash
-gallery iam-policy > bookphoto-policy.json
-# puis attacher cette policy au user/role qui exécute gallery
+gallery iam-policy > bookphoto-policy.json   # attach to the user/role that runs gallery
 ```
-
-## Coûts
-
-Pas de compute (tout statique). Les postes de coût sont :
-
-- **Stockage S3** : proportionnel au poids des images (originaux + dérivés).
-- **CloudFront** : transfert sortant + nombre de requêtes (selon le trafic).
-- **KeyValueStore / Function** : négligeable pour une galerie personnelle.
-
-Les montants dépendent de ton volume et de ton trafic ; pour une estimation chiffrée,
-utilise le [AWS Pricing Calculator](https://calculator.aws/). Détruire l'infra d'un site :
-`gallery destroy` (voir [commandes.md](commandes.md)).
