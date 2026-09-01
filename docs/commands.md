@@ -116,9 +116,22 @@ Non-destructive: `auto` restores the per-album choices.
 ## `remove`
 
 ```bash
-gallery remove <album>              # delete the whole album
-gallery remove <album> <files…>     # delete photos (original + derivatives + entry)
+gallery remove <album>                 # delete the whole album (asks confirmation)
+gallery remove <album> 3 5 7           # by 1-based index (order of `gallery album`/`list`)
+gallery remove <album> 3-8             # by range
+gallery remove <album> all             # every photo
+gallery remove <album> IMG_4821.jpg    # by filename (exact or stem)
+gallery remove <album> "flickr_503*"   # by glob pattern — QUOTE it (else the shell expands it)
+gallery remove <album> 2 5 -y          # skip confirmation
 ```
+
+Deletes photos (original + `thumbs/` + `display/` + the `album.yaml` entry). Selection is by
+**index**, **range**, `all`, **filename** (exact or stem), or **glob pattern** — mixable. Glob
+patterns (`*`, `?`, `[...]`) match against the album's filenames (case-insensitive); **quote
+them** so your shell doesn't expand them against the current folder. The confirmation **lists
+the filenames** about to be removed. If the deleted photo was the album **cover**, the cover
+falls back to the first remaining photo (change it with `gallery album`). `-y`/`--yes` skips the
+prompt.
 
 ---
 

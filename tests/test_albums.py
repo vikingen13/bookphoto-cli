@@ -128,6 +128,80 @@ def test_remove_photos_and_album(tmp_path, monkeypatch):
     assert not (tmp_path / slug).exists()
 
 
+def test_resolve_selection(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    slug = al.new_album("Album")
+    src = tmp_path / "s"
+    src.mkdir()
+    for n in ("a.jpg", "b.jpg", "c.jpg", "d.jpg"):
+        _make_jpg(src / n)
+    al.add_photos(slug, [src])  # ordre : a, b, c, d
+    assert al.resolve_selection(slug, ["2"]) == ["b.jpg"]
+    assert al.resolve_selection(slug, ["2-4"]) == ["b.jpg", "c.jpg", "d.jpg"]
+    assert al.resolve_selection(slug, ["4-2"]) == ["b.jpg", "c.jpg", "d.jpg"]  # bornes inversees
+    assert al.resolve_selection(slug, ["all"]) == ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]
+    assert al.resolve_selection(slug, ["a.jpg", "c"]) == ["a.jpg", "c.jpg"]     # nom + radical
+    assert al.resolve_selection(slug, ["1", "1", "a.jpg"]) == ["a.jpg"]          # dedup / ordre
+    with pytest.raises(ValueError):
+        al.resolve_selection(slug, ["9"])       # index hors limites
+    with pytest.raises(ValueError):
+        al.resolve_selection(slug, ["zzz"])     # ni index ni photo
+
+
+def test_resolve_selection_glob(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    slug = al.new_album("Album")
+    src = tmp_path / "s"
+    src.mkdir()
+    for n in ("flickr_5031.jpg", "flickr_5032.jpg", "img_9.jpg"):
+        _make_jpg(src / n)
+    al.add_photos(slug, [src])
+    assert al.resolve_selection(slug, ["flickr_503*"]) == ["flickr_5031.jpg", "flickr_5032.jpg"]
+    assert al.resolve_selection(slug, ["*_9"]) == ["img_9.jpg"]      # match sur le radical
+    assert al.resolve_selection(slug, ["FLICKR_*"]) == ["flickr_5031.jpg", "flickr_5032.jpg"]  # insensible casse
+    with pytest.raises(ValueError):
+        al.resolve_selection(slug, ["zzz_*"])   # motif sans correspondance
+
+
+def test_remove_resets_cover_when_deleted(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    slug = al.new_album("Album")
+    src = tmp_path / "s"
+    src.mkdir()
+    al.add_photos(slug, [_make_jpg(src / "a.jpg"), _make_jpg(src / "b.jpg")])
+    data = al.load_album(slug)
+    data["cover"] = "a.jpg"
+    al.write_album(slug, data)
+    al.remove_photos(slug, ["a.jpg"])
+    assert al.load_album(slug)["cover"] is None       # cover supprimee -> None
+    # supprimer une non-cover ne touche pas la cover
+    data = al.load_album(slug)
+    data["cover"] = "b.jpg"
+    al.write_album(slug, data)
+    al.add_photos(slug, [_make_jpg(src / "c.jpg")])
+    al.remove_photos(slug, ["c.jpg"])
+    assert al.load_album(slug)["cover"] == "b.jpg"
+
+
+def test_cli_remove_by_index(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from typer.testing import CliRunner
+    from bookphoto import config as cfg
+    from bookphoto.cli import app
+
+    cfg.save_site(cfg.SiteConfig(name="S", tagline="", cover=None, avatar=None, copyright=""))
+    slug = al.new_album("Album")
+    src = tmp_path / "s"
+    src.mkdir()
+    al.add_photos(slug, [_make_jpg(src / "a.jpg"), _make_jpg(src / "b.jpg"),
+                         _make_jpg(src / "c.jpg")])  # a, b, c
+    res = CliRunner().invoke(app, ["remove", slug, "2", "-y"])
+    assert res.exit_code == 0, res.output
+    files = [e["file"] for e in al.load_album(slug)["photos"]]
+    assert files == ["a.jpg", "c.jpg"]               # la 2e (b) supprimee
+    assert not (tmp_path / slug / "photos" / "b.jpg").exists()
+
+
 def test_new_album_defaults(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     slug = al.new_album("X")

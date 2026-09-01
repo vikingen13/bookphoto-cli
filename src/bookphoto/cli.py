@@ -373,20 +373,53 @@ def import_folder(
 @app.command()
 def remove(
     album: str = typer.Argument(..., help="Slug de l'album."),
-    photos: Optional[list[str]] = typer.Argument(None, help="Fichiers a supprimer (vide = tout l'album)."),
+    photos: Optional[list[str]] = typer.Argument(
+        None, help="Index (3), plages (3-6), 'all', motif quote (\"flickr_503*\") ou noms. Vide = tout l'album."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Ne pas demander de confirmation."),
 ) -> None:
-    """Supprimer des photos, ou l'album entier si aucun fichier n'est donne."""
+    """Supprimer des photos (par index, plage, 'all' ou nom), ou l'album entier si aucune donnee.
+
+    L'index (1-based) suit l'ordre de 'gallery album' / 'gallery list'. Exemples :
+    'gallery remove rue 3 5 7', 'gallery remove rue 3-8', 'gallery remove rue IMG_4821.jpg'.
+    La confirmation liste les NOMS de fichiers a supprimer. Si la cover est supprimee, elle
+    repasse a la 1re photo.
+    """
     _require_site()
+    if not al.album_exists(album):
+        console.print(f"[red]Album introuvable : '{album}'.[/red]")
+        raise typer.Exit(1)
+
+    if not photos:
+        if not yes and not typer.confirm(f"Supprimer TOUT l'album '{album}' ?"):
+            console.print("Annule.")
+            raise typer.Exit(0)
+        al.remove_album(album)
+        console.print(f"[green]Album supprime[/green] : {album}")
+        console.print("[dim]'gallery push' pour repercuter en ligne.[/dim]")
+        return
+
     try:
-        if not photos:
-            al.remove_album(album)
-            console.print(f"[green]Album supprime[/green] : {album}")
-        else:
-            removed = al.remove_photos(album, photos)
-            console.print(f"[green]{len(removed)} photo(s) supprimee(s)[/green] de {album}.")
-    except FileNotFoundError as exc:
+        targets = al.resolve_selection(album, photos)
+    except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1)
+    if not targets:
+        console.print("[yellow]Rien a supprimer.[/yellow]")
+        raise typer.Exit(0)
+
+    cover = (al.load_album(album) or {}).get("cover")
+    console.print(f"[yellow]{len(targets)} photo(s) a supprimer[/yellow] de '{album}' :")
+    for f in targets:
+        tag = "  [dim](cover)[/dim]" if f == cover else ""
+        console.print(f"  - {f}{tag}")
+    if not yes and not typer.confirm("Confirmer la suppression ?"):
+        console.print("Annule.")
+        raise typer.Exit(0)
+
+    removed = al.remove_photos(album, targets)
+    console.print(f"[green]{len(removed)} photo(s) supprimee(s)[/green] de {album}.")
+    if cover in removed:
+        console.print("[dim]La cover a ete supprimee : retour a la 1re photo (change-la via 'gallery album').[/dim]")
     console.print("[dim]'gallery push' pour repercuter en ligne.[/dim]")
 
 

@@ -63,7 +63,7 @@ gallery push                       # publish (S3 mirror + password + CloudFront 
 | `import <folder>` | Bulk import: one subfolder = one album |
 | `album <slug>` | Edit an album (title, description, cover, header) |
 | `headers on\|off\|auto` | Global override of the album cover banner |
-| `remove <album> [files]` | Remove photos (or the whole album) |
+| `remove <album> [sel]` | Remove photos by index/range/`all`/name (or the whole album) |
 | `list` | List albums |
 | `preview [--port]` | Local preview (builds the SPA + HTTP server) |
 | `push` | Publish: build + incremental S3 mirror + password + CloudFront invalidation |

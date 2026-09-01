@@ -15,6 +15,7 @@ import re
 import shutil
 import unicodedata
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from ruamel.yaml import YAML
@@ -164,8 +165,78 @@ def remove_photos(slug: str, names) -> list[str]:
         else:
             kept.append(entry)
     data["photos"] = kept
+    if data.get("cover") in removed:  # la cover supprimee : retour a la 1re photo au rendu
+        data["cover"] = None
     write_album(slug, data)
     return removed
+
+
+def resolve_selection(slug: str, tokens) -> list[str]:
+    """Resout une selection de photos en noms de fichiers, dans l'ordre de l'album.
+
+    Chaque token peut etre : un **index** 1-based (``3``), une **plage** (``3-6``),
+    ``all`` (toutes), ou un **nom de fichier** (exact ou par radical, comme la cover).
+    Ordre preserve, doublons ecartes. Leve ValueError si un token est invalide.
+    """
+    files = [e.get("file") for e in (load_album(slug).get("photos") or [])]
+    if not files:
+        raise ValueError(f"L'album '{slug}' n'a aucune photo.")
+    picked: list[str] = []
+    seen: set[str] = set()
+
+    def _add(f: str) -> None:
+        if f not in seen:
+            seen.add(f)
+            picked.append(f)
+
+    def _at(i: int) -> str:
+        if not (1 <= i <= len(files)):
+            raise ValueError(f"Index {i} hors limites (1..{len(files)}).")
+        return files[i - 1]
+
+    for tok in tokens:
+        t = str(tok).strip()
+        if not t:
+            continue
+        if t.lower() == "all":
+            for f in files:
+                _add(f)
+            continue
+        m = re.fullmatch(r"(\d+)\s*-\s*(\d+)", t)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            if a > b:
+                a, b = b, a
+            for i in range(a, b + 1):
+                _add(_at(i))
+            continue
+        if t.isdigit():
+            _add(_at(int(t)))
+            continue
+        if any(ch in t for ch in "*?["):  # motif glob (a quoter dans le shell : "flickr_503*")
+            tl = t.lower()
+            matches = [
+                f for f in files
+                if fnmatchcase(f.lower(), tl) or fnmatchcase(Path(f).stem.lower(), tl)
+            ]
+            if not matches:
+                raise ValueError(f"Aucune photo de '{slug}' ne correspond au motif '{t}'.")
+            for f in matches:
+                _add(f)
+            continue
+        name = Path(t).name  # jamais de chemin
+        if name in files:
+            _add(name)
+            continue
+        stem = Path(name).stem.lower()
+        match = next((f for f in files if Path(f).stem.lower() == stem), None)
+        if match:
+            _add(match)
+            continue
+        raise ValueError(
+            f"'{t}' n'est ni un index (1..{len(files)}) ni une photo de '{slug}'."
+        )
+    return picked
 
 
 def resolve_cover(slug: str, value: str | None) -> str | None:
