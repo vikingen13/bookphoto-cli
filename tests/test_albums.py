@@ -242,7 +242,7 @@ def test_headers_global(tmp_path, monkeypatch):
     from bookphoto.cli import app
 
     cfg.save_site(cfg.SiteConfig(name="S", tagline="", cover=None, avatar=None, copyright=""))
-    al.new_album("A")
+    slug = al.new_album("A")
 
     runner = CliRunner()
     assert runner.invoke(app, ["headers", "off"]).exit_code == 0
@@ -252,6 +252,6 @@ def test_headers_global(tmp_path, monkeypatch):
     assert runner.invoke(app, ["headers", "auto"]).exit_code == 0
     assert cfg.load_site().header_override is None
     # non destructif : le header de l'album n'est pas touche
-    assert al.load_album("A")["header"] is True
+    assert al.load_album(slug)["header"] is True
     # valeur invalide -> erreur
     assert runner.invoke(app, ["headers", "bidon"]).exit_code == 1
