@@ -186,6 +186,7 @@ def test_remove_resets_cover_when_deleted(tmp_path, monkeypatch):
 def test_cli_remove_by_index(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from typer.testing import CliRunner
+
     from bookphoto import config as cfg
     from bookphoto.cli import app
 
@@ -213,6 +214,7 @@ def test_new_album_defaults(tmp_path, monkeypatch):
 def test_import_keep_names(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from typer.testing import CliRunner
+
     from bookphoto import config as cfg
     from bookphoto.cli import app
 
@@ -235,6 +237,7 @@ def test_import_keep_names(tmp_path, monkeypatch):
 def test_headers_global(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from typer.testing import CliRunner
+
     from bookphoto import config as cfg
     from bookphoto.cli import app
 

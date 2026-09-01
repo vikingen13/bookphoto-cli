@@ -10,7 +10,6 @@ import re
 import shutil
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -83,8 +82,8 @@ def _import_image(path_str: str) -> str | None:
 # --------------------------------------------------------------------------- #
 @app.command()
 def init(
-    region: Optional[str] = typer.Option(None, "--region", help="Region AWS (defaut: celle du profil)."),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Profil AWS (~/.aws)."),
+    region: str | None = typer.Option(None, "--region", help="Region AWS (defaut: celle du profil)."),
+    profile: str | None = typer.Option(None, "--profile", help="Profil AWS (~/.aws)."),
 ) -> None:
     """Creer le site ici, saisir ses infos, provisionner l'infra AWS et le mettre en ligne."""
     from . import awsops
@@ -128,12 +127,12 @@ def init(
 
 @app.command()
 def config(
-    name: Optional[str] = typer.Option(None, "--name"),
-    tagline: Optional[str] = typer.Option(None, "--tagline"),
-    cover: Optional[str] = typer.Option(None, "--cover", help="Chemin d'une image (copiee dans assets/), ou '-' pour retirer."),
-    avatar: Optional[str] = typer.Option(None, "--avatar", help="Chemin d'une image (copiee dans assets/), ou '-' pour retirer."),
-    copyright: Optional[str] = typer.Option(None, "--copyright"),
-    password: Optional[str] = typer.Option(None, "--password"),
+    name: str | None = typer.Option(None, "--name"),
+    tagline: str | None = typer.Option(None, "--tagline"),
+    cover: str | None = typer.Option(None, "--cover", help="Chemin d'une image (copiee dans assets/), ou '-' pour retirer."),
+    avatar: str | None = typer.Option(None, "--avatar", help="Chemin d'une image (copiee dans assets/), ou '-' pour retirer."),
+    copyright: str | None = typer.Option(None, "--copyright"),
+    password: str | None = typer.Option(None, "--password"),
 ) -> None:
     """Afficher / modifier les infos du site (interactif si aucune option)."""
     _require_site()
@@ -187,7 +186,7 @@ def config(
 @app.command()
 def new(
     title: str = typer.Argument(..., help="Titre de l'album."),
-    slug: Optional[str] = typer.Option(None, "--slug", help="Identifiant court (defaut: derive)."),
+    slug: str | None = typer.Option(None, "--slug", help="Identifiant court (defaut: derive)."),
 ) -> None:
     """Creer un album (demande la description)."""
     _require_site()
@@ -208,10 +207,10 @@ def new(
 @app.command()
 def album(
     slug: str = typer.Argument(..., help="Slug de l'album."),
-    title: Optional[str] = typer.Option(None, "--title"),
-    description: Optional[str] = typer.Option(None, "--description"),
-    cover: Optional[str] = typer.Option(None, "--cover", help="Couverture : nom de fichier OU index (1-based) d'une photo de l'album."),
-    show_header: Optional[bool] = typer.Option(None, "--header/--no-header", help="Afficher le bandeau cover dans le header de l'album (defaut: oui)."),
+    title: str | None = typer.Option(None, "--title"),
+    description: str | None = typer.Option(None, "--description"),
+    cover: str | None = typer.Option(None, "--cover", help="Couverture : nom de fichier OU index (1-based) d'une photo de l'album."),
+    show_header: bool | None = typer.Option(None, "--header/--no-header", help="Afficher le bandeau cover dans le header de l'album (defaut: oui)."),
 ) -> None:
     """Afficher / modifier un album (interactif si aucune option)."""
     _require_site()
@@ -260,7 +259,7 @@ def album(
 
 @app.command()
 def headers(
-    state: Optional[str] = typer.Argument(None, help="on | off | auto (auto = par album). Sans argument : affiche l'etat."),
+    state: str | None = typer.Argument(None, help="on | off | auto (auto = par album). Sans argument : affiche l'etat."),
 ) -> None:
     """Override GLOBAL du header cover sur tous les albums (stocke dans site.yaml).
 
@@ -373,7 +372,7 @@ def import_folder(
 @app.command()
 def remove(
     album: str = typer.Argument(..., help="Slug de l'album."),
-    photos: Optional[list[str]] = typer.Argument(
+    photos: list[str] | None = typer.Argument(
         None, help="Index (3), plages (3-6), 'all', motif quote (\"flickr_503*\") ou noms. Vide = tout l'album."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Ne pas demander de confirmation."),
 ) -> None:
@@ -503,8 +502,8 @@ def push() -> None:
 @app.command()
 def pull(
     name: str = typer.Argument(..., help='Nom de la galerie a cloner (ex. "Ma galerie").'),
-    region: Optional[str] = typer.Option(None, "--region", help="Region AWS (defaut: profil)."),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Profil AWS (~/.aws)."),
+    region: str | None = typer.Option(None, "--region", help="Region AWS (defaut: profil)."),
+    profile: str | None = typer.Option(None, "--profile", help="Profil AWS (~/.aws)."),
 ) -> None:
     """Cloner une galerie depuis AWS dans le dossier courant.
 
@@ -531,7 +530,7 @@ def pull(
 
 @app.command()
 def domain(
-    name: Optional[str] = typer.Argument(None, help="Sous-domaine (ex. photos.example.com). Sans argument : affiche l'etat."),
+    name: str | None = typer.Argument(None, help="Sous-domaine (ex. photos.example.com). Sans argument : affiche l'etat."),
     clear: bool = typer.Option(False, "--clear", help="Retirer le domaine perso (retour au domaine cloudfront.net)."),
 ) -> None:
     """Associer un domaine perso a la distribution (certificat ACM us-east-1 + alias CloudFront).

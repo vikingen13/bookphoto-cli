@@ -81,6 +81,7 @@ def test_clean_path():
 
 def test_unchanged(tmp_path):
     import hashlib
+
     from bookphoto.awsops import _unchanged
     p = tmp_path / "f.bin"
     p.write_bytes(b"hello world")
@@ -99,8 +100,9 @@ def test_auth_value_public_and_basic():
 
 
 def test_pull_reports_and_rebuilds(monkeypatch, tmp_path):
-    from unittest.mock import MagicMock
     from pathlib import Path
+    from unittest.mock import MagicMock
+
     from bookphoto import config as cfg
 
     monkeypatch.chdir(tmp_path)
@@ -137,6 +139,7 @@ def test_pull_reports_and_rebuilds(monkeypatch, tmp_path):
 
 def test_pull_not_found_message(monkeypatch, tmp_path):
     from unittest.mock import MagicMock
+
     import pytest
 
     monkeypatch.chdir(tmp_path)
@@ -180,6 +183,7 @@ def test_is_apex():
 
 def test_set_domain_reuses_cert_and_updates_stack(monkeypatch, tmp_path):
     from unittest.mock import MagicMock
+
     from bookphoto import config as cfg
 
     monkeypatch.chdir(tmp_path)
@@ -222,6 +226,7 @@ def test_set_domain_reuses_cert_and_updates_stack(monkeypatch, tmp_path):
 
 def test_set_domain_rejects_apex(monkeypatch, tmp_path):
     import pytest
+
     from bookphoto import config as cfg
 
     monkeypatch.chdir(tmp_path)

@@ -50,3 +50,10 @@ packages = ["src/bookphoto"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Ruleset utile (pas de police de style) : erreurs de syntaxe, pyflakes, tri d'imports.
+select = ["E9", "F", "I"]

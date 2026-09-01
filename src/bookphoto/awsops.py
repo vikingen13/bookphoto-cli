@@ -360,7 +360,7 @@ def _unchanged(path: Path, s3_size: int, s3_etag: str) -> bool:
     etag = s3_etag.strip('"')
     if "-" in etag:  # upload multipart : pas de MD5 simple -> taille identique suffit (photos)
         return True
-    h = hashlib.md5()
+    h = hashlib.md5(usedforsecurity=False)  # nosec B324 - comparaison d'ETag S3, pas de la crypto
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
@@ -468,7 +468,7 @@ def pull(name: str, region: str | None = None, profile: str | None = None,
     _say(f"Recherche de la galerie « {name} » (stack {stack}, region {region})...")
     try:
         outputs = _stack_outputs(sess.client("cloudformation", region_name=region), stack)
-    except Exception as exc:  # noqa: BLE001 - message clair au lieu d'une trace boto
+    except Exception as exc:
         raise RuntimeError(
             f"Galerie « {name} » introuvable sur AWS (stack {stack}, region {region}). "
             "Verifie le nom exact de la galerie, la region (--region) et le profil (--profile)."

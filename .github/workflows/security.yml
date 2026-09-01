@@ -1,0 +1,30 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 3 * * 1"  # lundi 03:23 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Resolve dependencies
+        run: uv pip compile pyproject.toml -o requirements.txt
+      - name: Audit dependencies (CVE)
+        run: uvx pip-audit -r requirements.txt --no-deps
+
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Bandit (Python SAST)
+        run: uvx bandit -r src -ll
