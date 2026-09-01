@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Galerie</title>
+<style>
+/* ============================================================
+   DESIGN TOKENS — light, photo-first. Extract this :root verbatim.
+   ============================================================ */
+:root{
+  /* Color — clean white canvas, near-black ink, quiet grays, one restrained warm accent */
+  --bg:#ffffff;              /* app canvas */
+  --surface:#f2f1ee;         /* image placeholder / faint fills */
+  --surface-2:#eae9e5;       /* hover surface */
+  --fg:#16151a;              /* primary text (near-black) */
+  --muted:#6f6e6b;           /* secondary text */
+  --muted-2:#a6a49f;         /* tertiary: counts, fine print */
+  --border:#e8e7e3;          /* hairline separators */
+  --border-2:#d9d8d3;        /* slightly stronger hairline */
+  --accent:#9a7b57;          /* single restrained warm-neutral accent */
+  --overlay:#09090b;         /* lightbox scrim (fully opaque — album never shows through) */
+
+  /* Typography — neutral system grotesque (single family: utilitarian, data-dense) */
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --fs-xs:11px; --fs-sm:13px; --fs-base:15px; --fs-md:17px;
+  --fs-lg:22px; --fs-xl:clamp(24px,4vw,38px); --fs-2xl:clamp(30px,5vw,46px);
+  --lh-tight:1.12; --lh-snug:1.25; --lh-body:1.62;
+  --track-label:0.15em; --track-tight:-0.02em;
+  --w-light:300; --w-normal:400; --w-medium:500; --w-semibold:600;
+
+  /* Spacing scale (4px base) */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+  --sp-5:24px; --sp-6:32px; --sp-7:48px; --sp-8:64px; --sp-9:96px;
+
+  /* Radius — near-square, crisp */
+  --r-xs:2px; --r-sm:3px; --r-md:4px;
+
+  /* Shadows — subtle, only where elevation is real */
+  --shadow-sm:0 1px 3px rgba(20,18,16,0.10);
+  --shadow-md:0 6px 24px rgba(20,18,16,0.12);
+  --shadow-lg:0 30px 80px rgba(0,0,0,0.55);
+
+  /* Gallery */
+  --grid-gap:6px;            /* justified-row gap (tight, Flickr feel) */
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --ease-out:cubic-bezier(.16,1,.3,1);
+  --wrap:1040px;             /* album index container */
+  --wrap-wide:1240px;        /* justified gallery + hero identity */
+  --wrap-index:1760px;       /* album index grid — wide, columns keep filling */
+  --gutter:clamp(18px,4vw,48px);
+}
+
+/* ============================================================ RESET ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scrollbar-gutter:stable;overflow-y:scroll}
+body{
+  font-family:var(--font-sans);background:var(--bg);color:var(--fg);
+  font-size:var(--fs-base);line-height:var(--lh-body);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  min-height:100vh;overflow-x:hidden;
+}
+img{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+::selection{background:var(--accent);color:#fff}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:var(--r-xs)}
+
+/* Image fade-in (blur-up) */
+.ph{opacity:0;filter:blur(12px);transform:scale(1.02);transition:opacity .7s var(--ease-out),filter .7s var(--ease-out),transform .7s var(--ease-out)}
+.ph.is-loaded{opacity:1;filter:blur(0);transform:none}
+
+/* ============================================================ LAYOUT SHELL ===== */
+.wrap{max-width:var(--wrap);margin:0 auto;padding-inline:var(--gutter)}
+.wrap-wide{max-width:var(--wrap-wide);margin:0 auto;padding-inline:var(--gutter)}
+.wrap-index{max-width:var(--wrap-index);margin:0 auto;padding-inline:var(--gutter)}
+.view{animation:viewIn .5s var(--ease-out) both}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ============================================================ HERO (site.cover + avatar) */
+.hero{position:relative;width:100%;height:clamp(300px,46vh,520px);background:var(--surface)}
+.hero-cover{width:100%;height:100%;object-fit:cover;display:block}
+.hero-scrim{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.16),rgba(0,0,0,.02) 42%,rgba(0,0,0,.22));pointer-events:none}
+.hero-avatar-wrap{position:absolute;left:50%;bottom:0;transform:translate(-50%,50%);z-index:2}
+.hero-avatar{
+  width:clamp(94px,12vw,124px);aspect-ratio:1;border-radius:50%;object-fit:cover;object-position:50% 28%;
+  border:4px solid var(--bg);box-shadow:var(--shadow-md);background:var(--surface);
+}
+.hero-id{text-align:center;padding:clamp(70px,9vw,86px) var(--gutter) 0}
+.hero-name{font-size:var(--fs-2xl);font-weight:var(--w-light);letter-spacing:var(--track-tight);line-height:var(--lh-tight)}
+.hero-sub{margin-top:var(--sp-3);color:var(--muted);font-size:var(--fs-sm);letter-spacing:.05em}
+/* Variantes hero : cover et/ou avatar absents (design adaptatif, pas de bloc gris) */
+.hero-id--flush{padding-top:clamp(28px,5vw,44px)}
+.hero-plain{text-align:center;padding:clamp(48px,8vw,84px) var(--gutter) 0}
+.hero-avatar--inline{position:static;transform:none;display:inline-block;margin:0 auto var(--sp-4)}
+
+/* ============================================================ ALBUM INDEX (square covers) */
+.grid-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:var(--sp-4);
+  padding:clamp(40px,6vw,64px) 0 var(--sp-5);
+}
+.grid-head h2{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--track-label);font-weight:var(--w-semibold);color:var(--muted)}
+.grid-head .count{font-size:var(--fs-sm);color:var(--muted-2);letter-spacing:.02em;white-space:nowrap}
+.album-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:clamp(10px,1.6vw,18px);
+  padding-bottom:var(--sp-9);
+}
+.album-card{display:block;cursor:pointer}
+.album-cover{
+  position:relative;aspect-ratio:1;overflow:hidden;border-radius:var(--r-sm);
+  background:var(--surface);
+}
+.album-cover::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to top,rgba(0,0,0,.58),rgba(0,0,0,.12) 40%,transparent 64%);
+  opacity:.92;transition:opacity .4s ease;
+}
+.album-card:hover .album-cover::after{opacity:1}
+.album-cover img{width:100%;height:100%;object-fit:cover;transition:transform .9s var(--ease-out)}
+.album-card:hover .album-cover img.is-loaded{transform:scale(1.055)}
+.album-cap{position:absolute;left:0;bottom:0;z-index:1;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.album-cap .t{color:#fff;font-size:var(--fs-base);font-weight:var(--w-medium);letter-spacing:.005em;text-shadow:0 1px 4px rgba(0,0,0,.45)}
+.album-cap .c{color:rgba(255,255,255,.82);font-size:var(--fs-xs);letter-spacing:.04em;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+
+/* ============================================================ ALBUM PAGE ======= */
+/* Per-album header banner (uses album.cover) — mirrors the home hero. */
+.album-hero{position:relative;width:100%;height:clamp(200px,32vh,360px);overflow:hidden;background:var(--surface)}
+.album-hero img{width:100%;height:100%;object-fit:cover}
+.album-hero .hero-scrim{background:linear-gradient(to bottom,rgba(0,0,0,.30),rgba(0,0,0,.06) 45%,rgba(0,0,0,.34))}
+.album-back{
+  position:absolute;top:var(--sp-4);left:var(--sp-4);z-index:3;
+  width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:var(--r-sm);color:#fff;background:rgba(9,9,11,.38);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transition:background .2s ease,transform .2s ease;
+}
+.album-back:hover{background:rgba(9,9,11,.62)}
+.album-back:active{transform:scale(.94)}
+.album-back svg{width:20px;height:20px}
+.album-topbar{padding-top:var(--sp-4)}
+.album-back--plain{position:static;color:var(--fg);background:var(--surface);border:1px solid rgba(0,0,0,.10);backdrop-filter:none;-webkit-backdrop-filter:none}
+.album-back--plain:hover{background:var(--bg)}
+.album-head{padding-block:clamp(24px,3.4vw,40px) var(--sp-5)}
+.album-head h1{font-size:var(--fs-xl);font-weight:var(--w-light);letter-spacing:var(--track-tight);line-height:var(--lh-snug)}
+.album-desc{margin-top:var(--sp-3);color:var(--muted);font-size:var(--fs-md);max-width:62ch;line-height:var(--lh-body)}
+
+/* ---- Justified gallery (aspect-preserving) ---- */
+.justified{padding:var(--sp-6) 0 var(--sp-9)}
+.jrow{display:flex;gap:var(--grid-gap);margin-bottom:var(--grid-gap)}
+.jrow:last-child{margin-bottom:0}
+.jitem{position:relative;overflow:hidden;background:var(--surface);border-radius:var(--r-xs);cursor:zoom-in;flex:0 0 auto}
+.jitem::after{content:"";position:absolute;inset:0;background:rgba(9,9,11,0);transition:background .3s ease}
+.jitem:hover::after{background:rgba(9,9,11,.10)}
+.jitem img{width:100%;height:100%;object-fit:cover;transition:transform .9s var(--ease-out)}
+.jitem:hover img.is-loaded{transform:scale(1.05)}
+
+/* ============================================================ FOOTER (copyright only) */
+.site-footer{border-top:1px solid var(--border);margin-top:var(--sp-8)}
+.footer-inner{padding:var(--sp-7) var(--gutter) calc(var(--sp-8) + env(safe-area-inset-bottom));text-align:center}
+.footer-copy{color:var(--muted-2);font-size:var(--fs-xs);letter-spacing:.04em}
+
+/* ============================================================ LIGHTBOX ========= */
+.lightbox{
+  position:fixed;inset:0;z-index:100;background:var(--overlay);
+  display:flex;flex-direction:column;opacity:0;transition:opacity .32s var(--ease);
+  touch-action:pan-y;
+}
+.lightbox.is-open{opacity:1}
+.lightbox[hidden]{display:none}
+.lb-chrome{transition:opacity .4s ease}
+.lightbox.chrome-hidden .lb-chrome{opacity:0;pointer-events:none}
+.lb-top{
+  position:absolute;top:0;left:0;right:0;z-index:3;display:flex;justify-content:flex-end;
+  padding:var(--sp-4) var(--sp-4);background:linear-gradient(to bottom,rgba(0,0,0,.5),transparent);
+}
+.lb-close{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.72);border-radius:var(--r-sm);transition:color .2s ease,background .2s ease}
+.lb-close:hover{color:#fff;background:rgba(255,255,255,.10)}
+.lb-close svg{width:22px;height:22px}
+.lb-stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative;min-height:0;padding:0}
+.lb-photo{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .35s var(--ease)}
+.lb-photo.is-shown{opacity:1}
+.lb-nav{
+  position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+  width:52px;height:52px;display:flex;align-items:center;justify-content:center;color:#fff;border-radius:50%;
+  background:rgba(255,255,255,.06);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  transition:background .2s ease,transform .2s ease;
+}
+.lb-nav:hover{background:rgba(255,255,255,.14)}
+.lb-nav:active{transform:translateY(-50%) scale(.94)}
+.lb-nav.prev{left:var(--sp-5)} .lb-nav.next{right:var(--sp-5)}
+.lb-nav svg{width:24px;height:24px}
+.lb-caption{
+  position:absolute;bottom:0;left:0;right:0;z-index:3;
+  padding:var(--sp-6) var(--sp-6) calc(var(--sp-6) + env(safe-area-inset-bottom));
+  text-align:center;
+  background:linear-gradient(to top,rgba(0,0,0,.62),rgba(0,0,0,.28) 60%,transparent);
+}
+.lb-caption-inner{max-width:760px;margin:0 auto;width:100%}
+.lb-date{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--track-label);color:rgba(255,255,255,.55);font-weight:var(--w-semibold);margin-bottom:var(--sp-2)}
+.lb-text{font-size:var(--fs-md);color:rgba(255,255,255,.92);line-height:var(--lh-body)}
+
+/* ============================================================ RESPONSIVE ======= */
+@media(max-width:560px){
+  :root{--gutter:16px}
+  .album-grid{grid-template-columns:repeat(2,1fr)}
+  .album-cap{padding:10px 11px}
+  .lb-nav{display:none}      /* touch: swipe navigates */
+  .lb-stage{padding-inline:var(--sp-2)}
+  .lb-caption{padding-left:var(--sp-5);padding-right:var(--sp-5)}
+}
+@media(hover:none){.lb-nav{display:none}}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms!important;transition-duration:.001ms!important}
+  .ph{filter:none;transform:none}
+}
+</style>
+</head>
+<body>
+<main id="app" data-od-id="app"></main>
+
+<!-- Lightbox overlays the whole viewport, outside routed views -->
+<div class="lightbox" id="lightbox" data-od-id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo en plein écran">
+  <div class="lb-top lb-chrome">
+    <button class="lb-close" id="lbClose" data-od-id="lb-close" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="lb-stage" id="lbStage">
+    <button class="lb-nav prev lb-chrome" id="lbPrev" data-od-id="lb-prev" aria-label="Précédente">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <img class="lb-photo" id="lbPhoto" alt="">
+    <button class="lb-nav next lb-chrome" id="lbNext" data-od-id="lb-next" aria-label="Suivante">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+  </div>
+  <div class="lb-caption lb-chrome" data-od-id="lb-caption">
+    <div class="lb-caption-inner">
+      <div class="lb-date" id="lbDate"></div>
+      <div class="lb-text" id="lbText"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — exact shape:
+     site:  { name, tagline, avatar, cover, copyright }
+     albums:[ { id, title, description, cover, photos:[ { file, date, caption } ] } ]
+   (No links anywhere, no album date, no per-photo link.)
+   The 22 albums x 40 photos are generated from compact defs + the 12 real assets,
+   reused in a loop — purely to judge density. Final objects hold ONLY the fields above.
+   ============================================================ */
+/* Mock imagery: distinct seeded picsum photos (one seed per photo) so density is
+   judgeable. Aspect ratios vary (mix ~2:3 and ~3:2 + a couple of near-square) for the
+   in-album justified layout; album covers are square (600x600). The requested W/H live
+   in the URL, so the justified engine can read real dimensions with zero network calls. */
+let CONFIG = { site: {}, albums: [] };
+
+/* ============================================================ ICONS ============ */
+const ICON={
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
+};
+
+/* ============================================================ HELPERS ========== */
+const $=(s,r=document)=>r.querySelector(s);
+const app=$('#app');
+const albumById=id=>CONFIG.albums.find(a=>a.id===id);
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function wireImageLoads(root){
+  root.querySelectorAll('img.ph').forEach(img=>{
+    if(img.complete && img.naturalWidth) img.classList.add('is-loaded');
+    else{
+      img.addEventListener('load',()=>img.classList.add('is-loaded'),{once:true});
+      img.addEventListener('error',()=>img.classList.add('is-loaded'),{once:true});
+    }
+  });
+}
+/* Render a view. View Transitions are intentionally NOT used (they leave a stuck gray
+   overlay inside the sandboxed cross-origin preview iframe). Guarded so a throw never blanks. */
+function swapView(builder){ try{ builder(); }catch(e){ console.error('swapView failed',e); } }
+
+/* Natural-dimension source. CONFIG carries no w/h, but seeded picsum URLs end in
+   /<w>/<h> — read those directly (deterministic, no network). Fall back to measuring
+   any non-picsum image. */
+const dimCache=new Map();
+function ensureDims(files){
+  const need=[];
+  [...new Set(files)].forEach(f=>{
+    if(dimCache.has(f)) return;
+    const m=/\/(\d+)\/(\d+)(?:[?#].*)?$/.exec(f);
+    if(m){ dimCache.set(f,{w:+m[1],h:+m[2]}); } else need.push(f);
+  });
+  return Promise.all(need.map(f=>new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{dimCache.set(f,{w:im.naturalWidth||3,h:im.naturalHeight||2});res();};
+    im.onerror=()=>{dimCache.set(f,{w:3,h:2});res();};
+    im.src=f;
+  })));
+}
+const arOf=f=>{const d=dimCache.get(f)||{w:3,h:2};return d.w/d.h;};
+
+/* ============================================================ FOOTER =========== */
+function footerHTML(){
+  return `<footer class="site-footer" data-od-id="site-footer">
+    <div class="footer-inner"><div class="footer-copy">${esc(CONFIG.site.copyright)}</div></div>
+  </footer>`;
+}
+
+/* ============================================================ HOME ============= */
+function renderHome(){
+  const s=CONFIG.site;
+  const cards=CONFIG.albums.map(a=>`
+    <a class="album-card" data-od-id="album-card-${a.id}" href="#/a/${a.id}">
+      <div class="album-cover">
+        <img class="ph" src="${a.cover}" alt="${esc(a.title)}" loading="lazy">
+        <div class="album-cap">
+          <span class="t">${esc(a.title)}</span>
+          <span class="c">${a.photos.length} photos</span>
+        </div>
+      </div>
+    </a>`).join("");
+  const total=CONFIG.albums.reduce((n,a)=>n+a.photos.length,0);
+  return `<div class="view" data-od-id="home-view">
+    ${s.cover ? `<header class="hero" data-od-id="site-hero">
+      <img class="hero-cover ph" src="${s.cover}" alt="">
+      <div class="hero-scrim"></div>
+      ${s.avatar ? `<div class="hero-avatar-wrap"><img class="hero-avatar" src="${s.avatar}" alt="${esc(s.name)}" data-od-id="site-avatar"></div>` : ``}
+    </header>
+    <div class="hero-id${s.avatar?'':' hero-id--flush'}">
+      <h1 class="hero-name" data-od-id="site-name">${esc(s.name)}</h1>
+      <p class="hero-sub">${esc(s.tagline)}</p>
+    </div>` : `<div class="hero-plain" data-od-id="site-hero">
+      ${s.avatar ? `<img class="hero-avatar hero-avatar--inline" src="${s.avatar}" alt="${esc(s.name)}" data-od-id="site-avatar">` : ``}
+      <h1 class="hero-name" data-od-id="site-name">${esc(s.name)}</h1>
+      <p class="hero-sub">${esc(s.tagline)}</p>
+    </div>`}
+    <div class="wrap-index">
+      <div class="grid-head"><h2>Albums</h2><span class="count">${CONFIG.albums.length} albums · ${total} photos</span></div>
+      <div class="album-grid" data-od-id="album-grid">${cards}</div>
+    </div>
+    ${footerHTML()}
+  </div>`;
+}
+
+/* ============================================================ ALBUM + JUSTIFIED = */
+/* Rows of equal target height; item widths from aspect ratio; last row not stretched. */
+function justify(photos,containerWidth,gap,targetHeight){
+  const rows=[]; let row=[]; let arSum=0;
+  photos.forEach((p,idx)=>{
+    const ar=arOf(p.file);
+    row.push({p,ar,idx}); arSum+=ar;
+    const projectedH=(containerWidth-(row.length-1)*gap)/arSum;
+    if(projectedH<targetHeight){ rows.push({items:row,height:projectedH}); row=[]; arSum=0; }
+  });
+  if(row.length){
+    const h=Math.min(targetHeight,(containerWidth-(row.length-1)*gap)/arSum);
+    rows.push({items:row,height:h,last:true});
+  }
+  return rows;
+}
+function targetHeightFor(w){ if(w<480) return Math.max(150,w*0.5); if(w<900) return 220; return 300; }
+function paintJustified(album,container){
+  const width=container.clientWidth; if(!width) return;
+  const gap=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--grid-gap'))||6;
+  const rows=justify(album.photos,width,gap,targetHeightFor(width));
+  container.innerHTML=rows.map(r=>{
+    const items=r.items.map(({p,ar,idx})=>{
+      const w=Math.round(r.height*ar);
+      return `<figure class="jitem" data-od-id="grid-item" data-idx="${idx}" style="width:${w}px;height:${Math.round(r.height)}px">
+        <img class="ph" src="${p.thumb||p.file}" alt="${esc(p.caption||album.title)}" loading="lazy"></figure>`;
+    }).join("");
+    return `<div class="jrow">${items}</div>`;
+  }).join("");
+  wireImageLoads(container);
+}
+let gridRO=null;
+function mountJustified(album,grid){
+  ensureDims(album.photos.map(p=>p.file)).then(()=>{
+    if(!document.body.contains(grid)) return;
+    paintJustified(album,grid);
+    if(gridRO) gridRO.disconnect();
+    let lastW=grid.clientWidth;
+    gridRO=new ResizeObserver(()=>{
+      const w=grid.clientWidth;
+      if(w && Math.abs(w-lastW)>=1){ lastW=w; paintJustified(album,grid); }
+    });
+    gridRO.observe(grid);
+  });
+}
+function renderAlbum(id){
+  const album=albumById(id)||CONFIG.albums[0];
+  return `<div class="view" data-od-id="album-view">
+    ${album.header !== false ? `<header class="album-hero" data-od-id="album-hero">
+      <img class="ph" src="${album.cover}" alt="">
+      <div class="hero-scrim"></div>
+      <a class="album-back" href="#/" data-od-id="back-link" aria-label="Retour aux albums">${ICON.back}</a>
+    </header>` : `<div class="wrap-wide album-topbar">
+      <a class="album-back album-back--plain" href="#/" data-od-id="back-link" aria-label="Retour aux albums">${ICON.back}</a>
+    </div>`}
+    <div class="wrap-wide album-head">
+      <h1 data-od-id="album-title">${esc(album.title)}</h1>
+      <p class="album-desc" data-od-id="album-desc">${esc(album.description)}</p>
+    </div>
+    <div class="wrap-wide"><div class="justified" id="justifiedGrid" data-album="${album.id}" data-od-id="justified-grid"></div></div>
+    ${footerHTML()}
+  </div>`;
+}
+
+/* ============================================================ LIGHTBOX ========= */
+const LB={ el:$('#lightbox'), photo:$('#lbPhoto'), album:null, idx:0, open:false, chromeTimer:null, pushed:false };
+/* Full-res source for the lightbox: seeded picsum URLs end in /<w>/<h>; scale the long
+   edge up to ~1800px (same seed → same image, just larger). Non-picsum paths pass through. */
+function bigSrc(f){
+  const m=/^(.*)\/(\d+)\/(\d+)(?:([?#].*))?$/.exec(f);
+  if(!m) return f;
+  const w=+m[2], h=+m[3], k=1800/Math.max(w,h);
+  return `${m[1]}/${Math.round(w*k)}/${Math.round(h*k)}${m[4]||''}`;
+}
+function preload(src){ if(src){ const i=new Image(); i.src=bigSrc(src); } }
+function lbSet(idx){
+  const ph=LB.album.photos[idx]; LB.idx=idx;
+  LB.photo.classList.remove('is-shown');
+  const big=bigSrc(ph.file);
+  const img=new Image();
+  img.onload=()=>{ LB.photo.src=big; LB.photo.alt=ph.caption||''; requestAnimationFrame(()=>LB.photo.classList.add('is-shown')); };
+  img.onerror=()=>{ LB.photo.src=big; LB.photo.classList.add('is-shown'); };
+  img.src=big;
+  $('#lbDate').textContent=ph.date||'';
+  $('#lbText').textContent=ph.caption||'';
+  const n=LB.album.photos.length;
+  preload(LB.album.photos[(idx+1)%n].file);
+  preload(LB.album.photos[(idx-1+n)%n].file);
+  showChrome();
+}
+function lbNext(d){ const n=LB.album.photos.length; lbSet((LB.idx+d+n)%n); }
+function showChrome(){
+  LB.el.classList.remove('chrome-hidden');
+  clearTimeout(LB.chromeTimer);
+  LB.chromeTimer=setTimeout(()=>{ if(LB.open) LB.el.classList.add('chrome-hidden'); },2600);
+}
+function openLightbox(album,idx){
+  LB.album=album; LB.open=true; LB.el.hidden=false;
+  document.body.style.overflow='hidden';
+  requestAnimationFrame(()=>LB.el.classList.add('is-open'));
+  lbSet(idx);
+  history.pushState({lb:true},''); LB.pushed=true;
+}
+function closeLightbox(fromPop){
+  if(!LB.open) return;
+  LB.open=false; LB.el.classList.remove('is-open'); document.body.style.overflow='';
+  clearTimeout(LB.chromeTimer);
+  setTimeout(()=>{ if(!LB.open) LB.el.hidden=true; },320);
+  if(LB.pushed && !fromPop){ LB.pushed=false; history.back(); } else { LB.pushed=false; }
+}
+$('#lbClose').addEventListener('click',()=>closeLightbox());
+$('#lbPrev').addEventListener('click',e=>{e.stopPropagation();lbNext(-1);});
+$('#lbNext').addEventListener('click',e=>{e.stopPropagation();lbNext(1);});
+LB.el.addEventListener('mousemove',showChrome);
+LB.el.addEventListener('click',e=>{ if(e.target===LB.el||e.target===$('#lbStage')) closeLightbox(); });
+document.addEventListener('keydown',e=>{
+  if(!LB.open) return;
+  if(e.key==='Escape') closeLightbox();
+  else if(e.key==='ArrowRight') lbNext(1);
+  else if(e.key==='ArrowLeft') lbNext(-1);
+});
+window.addEventListener('popstate',()=>{ if(LB.open) closeLightbox(true); });
+let tx=0,ty=0,swiping=false;
+LB.el.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; tx=t.clientX; ty=t.clientY; swiping=true; showChrome(); },{passive:true});
+LB.el.addEventListener('touchend',e=>{
+  if(!swiping) return; swiping=false;
+  const t=e.changedTouches[0], dx=t.clientX-tx, dy=t.clientY-ty;
+  if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)) lbNext(dx<0?1:-1);
+  else if(dy>70 && Math.abs(dy)>Math.abs(dx)) closeLightbox();
+},{passive:true});
+
+/* Delegated open from any justified grid */
+app.addEventListener('click',e=>{
+  const item=e.target.closest('.jitem'); if(!item) return;
+  const grid=item.closest('.justified');
+  openLightbox(albumById(grid.dataset.album),parseInt(item.dataset.idx,10));
+});
+
+/* ============================================================ ROUTER =========== */
+function parseHash(){
+  const h=location.hash.replace(/^#/,'');
+  const m=h.match(/^\/a\/([\w-]+)/);
+  return m?{view:'album',id:m[1]}:{view:'home'};
+}
+let currentAlbumId=null;
+function route(){
+  if(LB.open) closeLightbox(true);
+  const r=parseHash();
+  swapView(()=>{
+    if(r.view==='album'){
+      app.innerHTML=renderAlbum(r.id);
+      currentAlbumId=(albumById(r.id)||CONFIG.albums[0]).id;
+      wireImageLoads(app);
+      mountJustified(albumById(currentAlbumId),$('#justifiedGrid'));
+    }else{
+      app.innerHTML=renderHome();
+      currentAlbumId=null;
+      if(gridRO){ gridRO.disconnect(); gridRO=null; }
+      wireImageLoads(app);
+    }
+    window.scrollTo(0,0);
+  });
+}
+window.addEventListener('hashchange',route);
+let rz;
+window.addEventListener('resize',()=>{
+  clearTimeout(rz);
+  rz=setTimeout(()=>{ const g=$('#justifiedGrid'); if(g&&currentAlbumId) paintJustified(albumById(currentAlbumId),g); },140);
+});
+
+/* ============================================================ BOOT ============= */
+function boot(){
+  document.title = (CONFIG.site && CONFIG.site.name) ? CONFIG.site.name : 'Galerie';
+  ensureDims(CONFIG.albums.map(a=>a.cover));
+  try{ route(); }
+  catch(e){ console.error('boot failed',e); app.innerHTML=renderHome(); wireImageLoads(app); }
+}
+fetch('data.json',{cache:'no-store'})
+  .then(r=>r.json())
+  .then(d=>{ CONFIG=d.config; (d.seed||[]).forEach(x=>dimCache.set(x[0],{w:x[1],h:x[2]})); boot(); })
+  .catch(e=>{ console.error('data.json load failed',e); app.innerHTML='<p style="padding:2rem">Erreur de chargement.</p>'; });
+</script>
+</body>
+</html>

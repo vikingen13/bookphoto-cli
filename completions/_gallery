@@ -1,0 +1,33 @@
+#compdef gallery
+# Completion zsh pour bookphoto (gallery).
+# Slot 1 = commande ; tout ce qui suit = fichiers/dossiers (chemins).
+# Installation :
+#   mkdir -p ~/.zfunc && cp completions/_gallery ~/.zfunc/
+#   grep -q '.zfunc' ~/.zshrc || echo 'fpath=(~/.zfunc $fpath); autoload -Uz compinit; compinit' >> ~/.zshrc
+#   exec zsh   # recharge le shell
+
+_gallery() {
+  local -a cmds
+  cmds=(
+    'init:Creer le site ici et le mettre en ligne'
+    'config:Afficher / modifier les infos du site'
+    'new:Creer un album'
+    'album:Afficher / modifier un album'
+    'add:Ajouter des photos (fichiers ou dossier)'
+    'remove:Supprimer des photos ou un album'
+    'list:Lister les albums'
+    'preview:Previsualiser la galerie en local'
+    'push:Mettre a jour le site en ligne'
+    'pull:Cloner une galerie depuis AWS'
+    'destroy:Detruire l infra AWS'
+    'doctor:Diagnostics'
+    'iam-policy:Afficher la policy IAM minimale'
+  )
+  if (( CURRENT == 2 )); then
+    _describe -t commands 'gallery' cmds
+  else
+    _files
+  fi
+}
+
+_gallery "$@"

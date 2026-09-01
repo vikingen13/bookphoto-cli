@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  bookphoto - galerie photo privee serverless : bucket S3 prive servi par CloudFront
+  via Origin Access Control (OAC), protege par Basic Auth (CloudFront Function + KeyValueStore).
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Nom global unique du bucket S3 (prive).
+  PriceClass:
+    Type: String
+    Default: PriceClass_100
+    AllowedValues: [PriceClass_100, PriceClass_200, PriceClass_All]
+    Description: Classe de prix CloudFront (100 = le moins cher, edge US/EU).
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  OAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  AuthKvs:
+    Type: AWS::CloudFront::KeyValueStore
+    Properties:
+      Name: !Sub "${AWS::StackName}-auth"
+      Comment: Stocke la valeur base64 "user:password" sous la cle 'auth'.
+
+  AuthFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${AWS::StackName}-basicauth"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Basic Auth (mot de passe unique) via KeyValueStore
+        Runtime: cloudfront-js-2.0
+        KeyValueStoreAssociations:
+          - KeyValueStoreARN: !GetAtt AuthKvs.Arn
+      FunctionCode: |
+        import cf from 'cloudfront';
+        const kvs = cf.kvs();
+        async function handler(event) {
+          const request = event.request;
+          const hdr = request.headers.authorization;
+          const provided = hdr && hdr.value;
+          let expected = null;
+          try { expected = await kvs.get('auth'); } catch (e) { expected = null; }
+          if (expected && provided === 'Basic ' + expected) {
+            return request;
+          }
+          return {
+            statusCode: 401,
+            statusDescription: 'Unauthorized',
+            headers: {
+              'www-authenticate': { value: 'Basic realm="Galerie privee"' },
+              'cache-control': { value: 'no-store' }
+            }
+          };
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "bookphoto ${AWS::StackName}"
+        DefaultRootObject: index.html
+        PriceClass: !Ref PriceClass
+        HttpVersion: http2and3
+        Origins:
+          - Id: s3origin
+            DomainName: !GetAtt Bucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: s3origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          # Managed policy "CachingOptimized"
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt AuthFunction.FunctionMetadata.FunctionARN
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 404
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 404
+            ResponsePagePath: /index.html
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOACRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${Bucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+Outputs:
+  BucketName:
+    Description: Nom du bucket S3 prive.
+    Value: !Ref Bucket
+  DistributionId:
+    Description: Identifiant de la distribution CloudFront.
+    Value: !Ref Distribution
+  DomainName:
+    Description: Domaine HTTPS de la galerie.
+    Value: !GetAtt Distribution.DomainName
+  KeyValueStoreArn:
+    Description: ARN du KeyValueStore (mot de passe Basic Auth).
+    Value: !GetAtt AuthKvs.Arn

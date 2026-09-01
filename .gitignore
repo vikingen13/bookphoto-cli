@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv / venv
+.venv/
+uv.lock
+
+# Tests / caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+
+# Secrets / config locale machine (jamais versionner)
+config.json
+
+# Scratch / artefacts locaux (dossiers de test, captures, sorties d'outils)
+.playwright-mcp/
+/Album/
+/Vide/
+/flickr-albums-mobile.png
+/seb-albums-desktop.png
