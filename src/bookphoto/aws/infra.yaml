@@ -65,6 +65,7 @@ Resources:
           const provided = hdr && hdr.value;
           let expected = null;
           try { expected = await kvs.get('auth'); } catch (e) { expected = null; }
+          if (expected === '-') { return request; }  // galerie publique (marqueur explicite)
           if (expected && provided === 'Basic ' + expected) {
             return request;
           }

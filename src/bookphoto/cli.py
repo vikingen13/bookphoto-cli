@@ -100,9 +100,9 @@ def init(
 
     name = typer.prompt("Nom du site", default=cfg.DEFAULT_SITE_NAME)
     tagline = typer.prompt("Slogan", default="")
-    cover = typer.prompt("Image de cover (chemin)", default="")
-    avatar = typer.prompt("Avatar (chemin)", default="")
-    password = typer.prompt(f"Mot de passe (utilisateur « {AUTH_USER} »)", hide_input=True)
+    cover = typer.prompt("Image de cover (chemin)", default="", show_default=False)
+    avatar = typer.prompt("Avatar (chemin)", default="", show_default=False)
+    password = typer.prompt(f"Mot de passe (« {AUTH_USER} » ; - = galerie publique)", hide_input=True)
     copyright_ = typer.prompt("Copyright", default=f"© {date.today().year} {name}")
 
     cfg.save_site(cfg.SiteConfig(
@@ -130,8 +130,8 @@ def init(
 def config(
     name: Optional[str] = typer.Option(None, "--name"),
     tagline: Optional[str] = typer.Option(None, "--tagline"),
-    cover: Optional[str] = typer.Option(None, "--cover", help="Chemin d'une image (copiee dans assets/)."),
-    avatar: Optional[str] = typer.Option(None, "--avatar", help="Chemin d'une image (copiee dans assets/)."),
+    cover: Optional[str] = typer.Option(None, "--cover", help="Chemin d'une image (copiee dans assets/), ou '-' pour retirer."),
+    avatar: Optional[str] = typer.Option(None, "--avatar", help="Chemin d'une image (copiee dans assets/), ou '-' pour retirer."),
     copyright: Optional[str] = typer.Option(None, "--copyright"),
     password: Optional[str] = typer.Option(None, "--password"),
 ) -> None:
@@ -143,14 +143,18 @@ def config(
     if all(f is None for f in (name, tagline, cover, avatar, copyright, password)):
         site.name = typer.prompt("Nom du site", default=site.name)
         site.tagline = typer.prompt("Slogan", default=site.tagline or "")
-        c = typer.prompt("Image de cover (chemin, vide=garder)", default="")
-        if c:
+        c = typer.prompt("Cover (chemin, - pour retirer)", default=site.cover or "")
+        if c == "-":
+            site.cover = None
+        elif c and c != (site.cover or ""):
             site.cover = _import_image(c)
-        a = typer.prompt("Avatar (chemin, vide=garder)", default="")
-        if a:
+        a = typer.prompt("Avatar (chemin, - pour retirer)", default=site.avatar or "")
+        if a == "-":
+            site.avatar = None
+        elif a and a != (site.avatar or ""):
             site.avatar = _import_image(a)
         site.copyright = typer.prompt("Copyright", default=site.copyright or "")
-        p = typer.prompt(f"Mot de passe (« {AUTH_USER} », vide=garder)", default="", hide_input=True)
+        p = typer.prompt(f"Mot de passe (« {AUTH_USER} » ; - = publique ; vide=garder)", default="", hide_input=True)
         if p:
             conf.password = p
     else:
@@ -160,9 +164,13 @@ def config(
             site.tagline = tagline
         if copyright is not None:
             site.copyright = copyright
-        if cover:
+        if cover == "-":
+            site.cover = None
+        elif cover:
             site.cover = _import_image(cover)
-        if avatar:
+        if avatar == "-":
+            site.avatar = None
+        elif avatar:
             site.avatar = _import_image(avatar)
         if password is not None:
             conf.password = password

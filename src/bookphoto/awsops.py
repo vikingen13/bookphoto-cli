@@ -279,14 +279,25 @@ def init_infrastructure(
 # --------------------------------------------------------------------------- #
 # password : mise a jour du KeyValueStore
 # --------------------------------------------------------------------------- #
+PUBLIC_MARKER = "-"  # mot de passe '-' => galerie publique (marqueur explicite, fail-closed)
+
+
+def _auth_value(user: str, password: str) -> str:
+    """Valeur a stocker dans le KVS : '-' pour une galerie publique, sinon base64(user:pwd)."""
+    return PUBLIC_MARKER if password == PUBLIC_MARKER else basic_auth_value(user, password)
+
+
 def set_password(kvs_arn: str, password: str, user: str = DEFAULT_AUTH_USER, profile: str | None = None) -> None:
-    """Ecrit base64("user:password") sous la cle 'auth' du KeyValueStore (execute AWS)."""
+    """Ecrit la valeur d'auth sous la cle 'auth' du KeyValueStore (execute AWS).
+
+    '-' => galerie publique ; sinon base64("user:password").
+    """
     kv = _session(profile).client("cloudfront-keyvaluestore")
     meta = kv.describe_key_value_store(KvsARN=kvs_arn)
     kv.put_key(
         KvsARN=kvs_arn,
         Key=AUTH_KEY,
-        Value=basic_auth_value(user, password),
+        Value=_auth_value(user, password),
         IfMatch=meta["ETag"],
     )
 

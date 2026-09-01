@@ -87,3 +87,9 @@ def test_unchanged(tmp_path):
     assert _unchanged(p, 10, f'"{md5}"') is False        # taille differente
     assert _unchanged(p, 11, '"abc123-2"') is True       # multipart, taille ok
     assert _unchanged(p, 12, '"abc123-2"') is False      # multipart, taille differente
+
+
+def test_auth_value_public_and_basic():
+    from bookphoto.awsops import _auth_value, basic_auth_value
+    assert _auth_value("invite", "-") == "-"                       # galerie publique
+    assert _auth_value("invite", "secret") == basic_auth_value("invite", "secret")

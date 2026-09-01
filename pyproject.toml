@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bookphoto"
-version = "0.5.0"
+version = "0.5.4"
 description = "CLI pour une galerie photo privee serverless sur AWS (S3 + CloudFront), protegee par mot de passe."
 readme = "README.md"
 requires-python = ">=3.12"
