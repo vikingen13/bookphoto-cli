@@ -115,6 +115,10 @@ Heads-up: the [AWS Pricing Calculator](https://calculator.aws/) does **not** sub
 uv run pytest
 ```
 
+## Support
+
+If bookphoto is useful to you, you can [buy me a coffee ☕](https://buymeacoffee.com/sebastiengrazzini).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
