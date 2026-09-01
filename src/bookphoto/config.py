@@ -84,6 +84,7 @@ class SiteConfig:
     cover: str | None = None
     avatar: str | None = None
     copyright: str | None = None
+    header_override: bool | None = None  # None=auto (par album), True=on, False=off (override global)
 
 
 def load_site() -> SiteConfig:
@@ -97,6 +98,7 @@ def load_site() -> SiteConfig:
         cover=data.get("cover"),
         avatar=data.get("avatar"),
         copyright=data.get("copyright"),
+        header_override=data.get("header_override"),
     )
 
 
@@ -108,6 +110,8 @@ def save_site(site: SiteConfig) -> Path:
         "avatar": site.avatar or "",
         "copyright": site.copyright or "",
     }
+    if site.header_override is not None:
+        data["header_override"] = site.header_override
     buf = io.StringIO()
     yaml = YAML()
     yaml.default_flow_style = False

@@ -108,7 +108,8 @@ def build_data() -> tuple[dict, BuildResult]:
             "title": data.get("title") or slug,
             "description": data.get("description") or "",
             "cover": cover,
-            "header": bool(data.get("header", True)),
+            "header": (site.header_override if site.header_override is not None
+                       else bool(data.get("header", True))),
             "photos": photos,
         })
         res.albums += 1

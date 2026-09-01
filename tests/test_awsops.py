@@ -62,7 +62,7 @@ def test_cloudformation_template_present():
 def test_cli_registers_all_commands():
     click_cmd = typer.main.get_command(app)
     sub = set(click_cmd.commands.keys())
-    for c in ["new", "add", "import", "remove", "list", "album", "preview",
+    for c in ["new", "add", "import", "remove", "list", "album", "headers", "preview",
               "init", "config", "push", "pull", "destroy", "doctor", "iam-policy"]:
         assert c in sub, c
 

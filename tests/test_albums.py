@@ -156,3 +156,25 @@ def test_import_keep_names(tmp_path, monkeypatch):
     assert {"alpha", "beta"} <= slugs
     assert "empty" not in slugs
     assert len(al.load_album("alpha")["photos"]) == 1
+
+
+def test_headers_global(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from typer.testing import CliRunner
+    from bookphoto import config as cfg
+    from bookphoto.cli import app
+
+    cfg.save_site(cfg.SiteConfig(name="S", tagline="", cover=None, avatar=None, copyright=""))
+    al.new_album("A")
+
+    runner = CliRunner()
+    assert runner.invoke(app, ["headers", "off"]).exit_code == 0
+    assert cfg.load_site().header_override is False
+    assert runner.invoke(app, ["headers", "on"]).exit_code == 0
+    assert cfg.load_site().header_override is True
+    assert runner.invoke(app, ["headers", "auto"]).exit_code == 0
+    assert cfg.load_site().header_override is None
+    # non destructif : le header de l'album n'est pas touche
+    assert al.load_album("A")["header"] is True
+    # valeur invalide -> erreur
+    assert runner.invoke(app, ["headers", "bidon"]).exit_code == 1

@@ -238,8 +238,10 @@ def album(
         raw = typer.prompt("Couverture (nom de fichier ou index, vide=1re photo)",
                            default=data.get("cover") or "")
         _set_cover(raw)
-        data["header"] = typer.confirm("Afficher la cover dans le header de l'album ?",
-                                       default=data.get("header", True))
+        _cur_header = data.get("header", True)
+        data["header"] = typer.confirm(
+            f"Afficher la cover dans le header ? (actuel : {'oui' if _cur_header else 'non'})",
+            default=_cur_header)
     else:
         if title is not None:
             data["title"] = title
@@ -254,6 +256,32 @@ def album(
     if data.get("cover"):
         console.print(f"[dim]Couverture : {data['cover']}[/dim]")
     console.print(f"[dim]Header cover : {'oui' if data.get('header', True) else 'non'}[/dim]")
+
+
+@app.command()
+def headers(
+    state: Optional[str] = typer.Argument(None, help="on | off | auto (auto = par album). Sans argument : affiche l'etat."),
+) -> None:
+    """Override GLOBAL du header cover sur tous les albums (stocke dans site.yaml).
+
+    on = force affiche partout ; off = force masque partout ; auto = chaque album decide
+    (son propre reglage via 'gallery album'). Non destructif : 'auto' restaure les choix par album.
+    """
+    _require_site()
+    site = cfg.load_site()
+    labels = {True: "on (force affiche)", False: "off (force masque)", None: "auto (par album)"}
+    if state is None:
+        console.print(f"Override header global : [bold]{labels[site.header_override]}[/bold]")
+        return
+    mapping = {"on": True, "off": False, "auto": None}
+    key = state.strip().lower()
+    if key not in mapping:
+        console.print("[red]Valeur invalide.[/red] Utilise : on | off | auto.")
+        raise typer.Exit(1)
+    site.header_override = mapping[key]
+    cfg.save_site(site)
+    console.print(f"[green]Override header global : {labels[site.header_override]}[/green]. "
+                  "[dim]'gallery push' pour publier.[/dim]")
 
 
 @app.command()
