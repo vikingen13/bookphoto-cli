@@ -82,6 +82,7 @@ def iam_policy() -> dict:
                     "s3:PutBucketPolicy",
                     "s3:PutBucketPublicAccessBlock",
                     "s3:PutBucketOwnershipControls",
+                    "s3:PutBucketTagging",
                     "s3:PutEncryptionConfiguration",
                     "s3:GetBucketPolicy",
                     "s3:GetBucketPublicAccessBlock",
@@ -221,6 +222,7 @@ def init_infrastructure(
     save: bool = True,
     profile: str | None = None,
     progress=None,
+    tags: dict | None = None,
 ) -> dict:
     """Cree/actualise la stack CloudFormation et renvoie ses outputs (execute AWS)."""
     cf = _session(profile).client("cloudformation", region_name=region)
@@ -231,13 +233,14 @@ def init_infrastructure(
     ]
     do_wait = True
     seen: set[str] = set()
+    tag_list = [{"Key": k, "Value": v} for k, v in (tags or {}).items()]
     if _stack_exists(cf, stack_name):
         try:
             seen = {e["EventId"] for e in cf.describe_stack_events(StackName=stack_name)["StackEvents"]}
         except cf.exceptions.ClientError:
             pass
         try:
-            cf.update_stack(StackName=stack_name, TemplateBody=template, Parameters=params)
+            cf.update_stack(StackName=stack_name, TemplateBody=template, Parameters=params, Tags=tag_list)
         except cf.exceptions.ClientError as exc:
             if "No updates are to be performed" in str(exc):
                 do_wait = False
@@ -248,6 +251,7 @@ def init_infrastructure(
             StackName=stack_name,
             TemplateBody=template,
             Parameters=params,
+            Tags=tag_list,
             OnFailure="DELETE",
         )
 
@@ -311,7 +315,9 @@ def provision_and_publish(region, profile=None, progress=None) -> dict:
     slug = slugify(cfg.load_site().name)
     stack = f"bookphoto-{slug}"
     bucket = f"bookphoto-{slug}-{account_id(profile)}"
-    outputs = init_infrastructure(bucket, region, stack_name=stack, profile=profile, progress=progress)
+    tags = {"Project": "bookphoto", "Gallery": slug, "ManagedBy": "bookphoto"}
+    outputs = init_infrastructure(bucket, region, stack_name=stack, profile=profile,
+                                  progress=progress, tags=tags)
     conf = cfg.load_config()
     conf.stack = stack
     conf.kvs_arn = outputs.get("KeyValueStoreArn")
