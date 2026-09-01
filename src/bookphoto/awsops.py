@@ -80,6 +80,7 @@ def iam_policy() -> dict:
                 "Action": [
                     "s3:CreateBucket",
                     "s3:PutBucketPolicy",
+                    "s3:DeleteBucketPolicy",
                     "s3:PutBucketPublicAccessBlock",
                     "s3:PutBucketOwnershipControls",
                     "s3:PutBucketTagging",
@@ -113,6 +114,7 @@ def iam_policy() -> dict:
                 "Effect": "Allow",
                 "Action": [
                     "cloudfront:GetDistribution",
+                    "cloudfront:GetDistributionConfig",
                     "cloudfront:UpdateDistribution",
                     "cloudfront:DeleteDistribution",
                     "cloudfront:CreateInvalidation",
@@ -432,29 +434,50 @@ def push(conf: cfg.AppConfig, user: str = DEFAULT_AUTH_USER, progress=None) -> d
 # pull : cloner le site depuis S3
 # --------------------------------------------------------------------------- #
 def pull(name: str, region: str | None = None, profile: str | None = None,
-         user: str = DEFAULT_AUTH_USER) -> int:
+         user: str = DEFAULT_AUTH_USER, progress=None) -> int:
     """Clone la galerie ``name`` depuis AWS dans le DOSSIER COURANT.
 
     Source de verite : la stack ``bookphoto-<slug(nom de la galerie)>``. Le nom du
     dossier local n'a aucune importance. Reconstruit ``.bookphoto.json`` depuis les
-    outputs de la stack et restaure le mot de passe depuis le KVS.
+    outputs de la stack et restaure le mot de passe depuis le KVS. ``progress`` recoit
+    une ligne texte a chaque etape.
     """
+    def _say(m):
+        if progress:
+            progress(m)
+
     dest = Path.cwd()
     region = region or default_region(profile)
     stack = f"bookphoto-{slugify(name)}"
     sess = _session(profile)
-    outputs = _stack_outputs(sess.client("cloudformation", region_name=region), stack)
+
+    _say(f"Recherche de la galerie « {name} » (stack {stack}, region {region})...")
+    try:
+        outputs = _stack_outputs(sess.client("cloudformation", region_name=region), stack)
+    except Exception as exc:  # noqa: BLE001 - message clair au lieu d'une trace boto
+        raise RuntimeError(
+            f"Galerie « {name} » introuvable sur AWS (stack {stack}, region {region}). "
+            "Verifie le nom exact de la galerie, la region (--region) et le profil (--profile)."
+        ) from exc
     bucket = outputs["BucketName"]
 
     s3 = sess.client("s3", region_name=region)
+    _say(f"Galerie trouvee (bucket {bucket}). Inventaire du contenu...")
+    keys = [
+        o["Key"]
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket)
+        for o in page.get("Contents", [])
+    ]
+    total = len(keys)
+    _say(f"Telechargement de {total} fichier(s)..." if total else "Bucket vide : rien a telecharger.")
     n = 0
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket):
-        for obj in page.get("Contents", []):
-            target = dest / obj["Key"]
-            target.parent.mkdir(parents=True, exist_ok=True)
-            s3.download_file(bucket, obj["Key"], str(target))
-            n += 1
+    for key in keys:
+        target = dest / key
+        target.parent.mkdir(parents=True, exist_ok=True)
+        s3.download_file(bucket, key, str(target))
+        n += 1
+        if n == 1 or n % 20 == 0 or n == total:
+            _say(f"  telecharge {n}/{total}...")
 
     conf = cfg.AppConfig(
         region=region, bucket=bucket, profile=profile, stack=stack,
@@ -470,9 +493,10 @@ def pull(name: str, region: str | None = None, profile: str | None = None,
             decoded = base64.b64decode(value).decode()
             conf.password = decoded.split(":", 1)[1] if ":" in decoded else None
         except Exception:  # noqa: BLE001 - le clone ne doit pas casser si le KVS est illisible
-            pass
+            _say("Mot de passe non recupere (KVS illisible) — a redefinir via 'gallery config'.")
 
-    cfg.save_config(conf, dest)
+    cfg.save_config(conf)
+    _say("Configuration locale reconstruite (.bookphoto.json).")
     return n
 
 

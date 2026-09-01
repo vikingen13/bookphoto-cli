@@ -93,3 +93,63 @@ def test_auth_value_public_and_basic():
     from bookphoto.awsops import _auth_value, basic_auth_value
     assert _auth_value("invite", "-") == "-"                       # galerie publique
     assert _auth_value("invite", "secret") == basic_auth_value("invite", "secret")
+
+
+def test_pull_reports_and_rebuilds(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+    from pathlib import Path
+    from bookphoto import config as cfg
+
+    monkeypatch.chdir(tmp_path)
+    cf = MagicMock()
+    cf.describe_stacks.return_value = {"Stacks": [{"Outputs": [
+        {"OutputKey": "BucketName", "OutputValue": "bookphoto-x-123"},
+        {"OutputKey": "DistributionId", "OutputValue": "DIST"},
+        {"OutputKey": "DomainName", "OutputValue": "d.cloudfront.net"},
+        {"OutputKey": "KeyValueStoreArn", "OutputValue": "arn:kvs"},
+    ]}]}
+    s3 = MagicMock()
+    pag = MagicMock()
+    pag.paginate.return_value = [{"Contents": [{"Key": "site.yaml"}, {"Key": "a/album.yaml"}]}]
+    s3.get_paginator.return_value = pag
+    s3.download_file.side_effect = lambda b, k, p: Path(p).write_text("x", encoding="utf-8")
+    kv = MagicMock()
+    kv.get_key.return_value = {"Value": awsops.basic_auth_value("invite", "secret")}
+    clients = {"cloudformation": cf, "s3": s3, "cloudfront-keyvaluestore": kv}
+    sess = MagicMock()
+    sess.client.side_effect = lambda name, region_name=None: clients[name]
+    monkeypatch.setattr(awsops, "_session", lambda profile=None: sess)
+
+    msgs: list[str] = []
+    n = awsops.pull("X", region="eu-west-1", progress=msgs.append)
+
+    assert n == 2
+    assert any("Telechargement de 2" in m for m in msgs)
+    assert (tmp_path / "site.yaml").exists() and (tmp_path / "a" / "album.yaml").exists()
+    conf = cfg.load_config()
+    assert conf.bucket == "bookphoto-x-123"
+    assert conf.url == "https://d.cloudfront.net"
+    assert conf.password == "secret"
+
+
+def test_pull_not_found_message(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+    import pytest
+
+    monkeypatch.chdir(tmp_path)
+    cf = MagicMock()
+    cf.describe_stacks.side_effect = RuntimeError("stack absente")
+    sess = MagicMock()
+    sess.client.side_effect = lambda name, region_name=None: cf
+    monkeypatch.setattr(awsops, "_session", lambda profile=None: sess)
+
+    with pytest.raises(RuntimeError, match="introuvable"):
+        awsops.pull("Inexistante", region="eu-west-1")
+
+
+def test_iam_policy_has_destroy_permissions():
+    """destroy supprime BucketPolicy + Bucket + Distribution : les droits doivent y etre."""
+    actions = {a for st in awsops.iam_policy()["Statement"] for a in st["Action"]}
+    for needed in ("s3:DeleteBucketPolicy", "s3:DeleteBucket",
+                   "cloudfront:DeleteDistribution", "cloudfront:GetDistributionConfig"):
+        assert needed in actions, needed

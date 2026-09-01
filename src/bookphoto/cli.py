@@ -480,8 +480,19 @@ def pull(
     """
     from . import awsops
 
-    n = awsops.pull(name, region=region, profile=profile, user=AUTH_USER)
-    console.print(f"[green]{n} fichier(s) clone(s)[/green] dans {Path.cwd()}.")
+    try:
+        n = awsops.pull(name, region=region, profile=profile, user=AUTH_USER,
+                        progress=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    except Exception as exc:  # noqa: BLE001 - on veut un message propre, pas une trace
+        console.print(f"[red]Echec du pull : {exc}[/red]")
+        raise typer.Exit(1)
+    if n == 0:
+        console.print("[yellow]Aucun fichier clone[/yellow] (galerie vide ?).")
+    else:
+        console.print(f"[green]{n} fichier(s) clone(s)[/green] dans {Path.cwd()}.")
+    conf = cfg.load_config()
+    if conf.url:
+        console.print(f"URL : [bold]{conf.url}[/bold]")
     console.print("[dim]Le site est pret : edite puis 'gallery push'.[/dim]")
 
 
@@ -504,7 +515,16 @@ def destroy(
     if not yes and not typer.confirm("Confirmer ?"):
         console.print("Annule.")
         raise typer.Exit(0)
-    awsops.destroy(conf, progress=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    try:
+        awsops.destroy(conf, progress=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    except Exception as exc:  # noqa: BLE001 - message propre, pas de traceback
+        console.print(f"[red]Echec de la suppression : {exc}[/red]")
+        console.print(
+            "[yellow]La stack est en DELETE_FAILED.[/yellow] Souvent une permission manquante "
+            "(ex. s3:DeleteBucketPolicy). Mets a jour les droits ([bold]gallery iam-policy[/bold]) "
+            "puis relance [bold]gallery destroy[/bold]."
+        )
+        raise typer.Exit(1)
     console.print("[green]Infra supprimee.[/green] (Le contenu local est conserve.)")
 
 

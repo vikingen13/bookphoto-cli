@@ -1,88 +1,95 @@
 # bookphoto
 
-CLI pour une **galerie photo privée serverless** sur AWS (S3 privé + CloudFront), protégée par un **mot de passe unique** (Basic Auth via CloudFront Function + KeyValueStore). Administration 100 % locale en Python ; design de la galerie produit avec Open Design.
+CLI pour une **galerie photo privée serverless** sur AWS : **S3 privé + CloudFront**, protégée par un **mot de passe unique** (Basic Auth via CloudFront Function + KeyValueStore). Administration 100 % locale en Python.
 
-**Un site = un dossier.** Tu `cd` dans un dossier, `gallery init` l'initialise, et tout (branding, albums, config AWS, build) vit **dans ce dossier**. Plusieurs galeries = plusieurs dossiers indépendants — aucun état global.
+**Un site = un dossier.** Tu `cd` dans un dossier, `gallery init` le crée, le déploie sur AWS et le met en ligne — tout (branding, albums, config, build) vit **dans ce dossier**. Plusieurs galeries = plusieurs dossiers indépendants, aucun état global.
 
-> État : socle local complet (site, albums+EXIF, dérivés, **générateur de site statique**) + **code** des commandes AWS (`provision`, `password`, `publish`, `pull`, `doctor`, `iam-policy`). Le déploiement AWS n'a pas encore été exécuté.
+- 🔒 Bucket S3 **privé**, servi uniquement par CloudFront (Origin Access Control, SigV4).
+- 🔑 **Un seul mot de passe** (utilisateur fixe `invite`) ; `-` = galerie **publique**.
+- ⚡ Site **statique** (SPA `index.html` + `data.json`) ; miroir S3 **incrémental**.
+- 🖥️ Aucune AWS CLI requise : tout passe par **boto3** (livré avec l'outil).
 
 ## Prérequis
 
-- Python **3.12+** (recommandé : 3.14)
+- **Python 3.12+**
 - [uv](https://docs.astral.sh/uv/) : `brew install uv`
-- Pour les commandes AWS : des identifiants AWS (`~/.aws`) avec les droits de `gallery iam-policy`.
+- Des identifiants AWS (`~/.aws`) avec les droits de `gallery iam-policy` (voir [docs/architecture.md](docs/architecture.md)).
 
 ## Installation
 
 ```bash
-uv sync
-uv run gallery --help
-# ou, comme outil global :
-uv tool install .
-gallery --help
+uv tool install --editable .   # depuis le dépôt cloné
+gallery --version
 ```
 
-## Flux de travail
+Identifiants AWS (au choix) : profil `~/.aws/credentials` (recommandé), variables d'env (`AWS_ACCESS_KEY_ID`…), ou SSO (`aws sso login`). bookphoto ne mémorise que le **nom** du profil (`--profile`), jamais les secrets.
+
+## Démarrage rapide
 
 ```bash
-mkdir mon-book && cd mon-book        # le dossier = le site
-gallery init                          # crée site.yaml + assets/ ici
-# édite site.yaml (nom, tagline, cover, avatar) et dépose les images dans assets/
+mkdir mon-book && cd mon-book     # le dossier = le site
+gallery init                       # infos + déploiement AWS + mise en ligne (interactif)
 
-gallery new "Rue de nuit"             # crée l'album + album.yaml
-gallery add rue-de-nuit ~/photos/*.jpg  # copie les photos, lit la date EXIF
-gallery gen rue-de-nuit               # miniatures (thumbs/) + affichage (display/)
-gallery list                          # liste les albums
-gallery build                         # génère le site statique dans ./build
-
-# --- AWS (le jour de la mise en ligne) ---
-gallery provision --bucket mon-book-unique-123 --region eu-west-3 --profile bookphoto
-gallery password                      # mot de passe unique (Basic Auth)
-gallery publish                       # build + upload S3 + invalidation CloudFront
-gallery doctor                        # diagnostics
-gallery pull ./backup                 # récupère le site publié
-gallery iam-policy                    # policy IAM minimale requise
+gallery new "Rue de nuit"          # crée un album (demande la description)
+gallery add rue-de-nuit ~/photos/*.jpg   # copie, lit l'EXIF, génère les dérivés
+gallery preview                    # aperçu local (http://127.0.0.1:8000)
+gallery push                       # met à jour en ligne (miroir S3 + mot de passe + invalidation)
 ```
 
-### Identifiants AWS (pas besoin de l'AWS CLI)
+`gallery init` te demande : nom, slogan, image de cover, avatar, **mot de passe** (`invite` ; `-` pour une galerie publique), copyright — puis provisionne la stack CloudFormation et publie. Options : `--region`, `--profile`.
 
-bookphoto parle à AWS via **boto3** (livré avec l'outil). Fournis tes identifiants au choix :
+## Commandes
 
-- **Profil** `~/.aws/credentials` (recommandé — écrit une fois, mémorisé par `--profile` dans `.bookphoto.json` du site) :
-  ```ini
-  [bookphoto]
-  aws_access_key_id = AKIA...
-  aws_secret_access_key = ...
-  region = eu-west-3
-  ```
-- ou variables d'env (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`), ou un profil SSO (`aws sso login`).
+| Commande | Rôle |
+|---|---|
+| `init` | Crée le site ici, **provisionne l'infra AWS** et met en ligne |
+| `config` | Voir / modifier le branding et le mot de passe |
+| `new "<titre>"` | Créer un album |
+| `add <album> <fichiers>` | Ajouter des photos (copie + date EXIF + dérivés) |
+| `import <dossier>` | Import en masse : un sous-dossier = un album |
+| `album <slug>` | Modifier un album (titre, description, cover, header) |
+| `headers on\|off\|auto` | Override global du bandeau cover des albums |
+| `remove <album> [fichiers]` | Supprimer des photos (ou l'album entier) |
+| `list` | Lister les albums |
+| `preview [--port]` | Aperçu local (génère la SPA + serveur HTTP) |
+| `push` | Publier : génère + miroir S3 incrémental + mot de passe + invalidation CloudFront |
+| `pull "<nom>"` | Cloner une galerie existante depuis AWS (par **nom**) |
+| `destroy [--yes]` | Détruire l'infra AWS de ce site (vide le bucket + supprime la stack) |
+| `doctor` | Diagnostics (lecture seule) |
+| `iam-policy` | Afficher la politique IAM minimale requise |
 
-Les secrets restent dans `~/.aws` — **jamais** dans le projet. bookphoto ne mémorise que le **nom** du profil.
+Référence détaillée : [docs/commandes.md](docs/commandes.md).
 
 ## Organisation d'un site (le dossier)
 
 ```
 mon-book/
-  site.yaml        # branding : name, tagline, cover (hero), avatar, copyright
-  .bookphoto.json  # config machine (region, bucket, distribution, url, profil) — écrite par `provision`
-  assets/          # images de branding (cover.jpg, avatar.jpg)
+  site.yaml        # branding : name, tagline, cover, avatar, copyright, header_override
+  .bookphoto.json  # config machine (region, bucket, distribution, url, profil, stack…) — écrite par init
+  assets/          # images de branding (cover, avatar)
   <slug>/
-    album.yaml     # title, description, cover, photos:[{file, date, caption}]
+    album.yaml     # title, description, cover, header, photos:[{file, date, caption}]
     photos/        # originaux copiés
-    thumbs/        # miniatures (grille)
-    display/       # versions d'affichage (lightbox, covers)
-  build/           # site généré (uploadé par `publish`)
+    thumbs/        # miniatures (≤ 400 px)
+    display/       # versions d'affichage (≤ 2048 px)
+  index.html       # SPA générée (git-ignorée)
+  data.json        # données de la galerie générées (git-ignorées)
 ```
 
-## Architecture AWS
+`gallery init` écrit un `.gitignore` excluant `.bookphoto.json`, `index.html` et `data.json`.
 
-- **S3 privé** (public access bloqué, chiffré) — servi **uniquement** via CloudFront (**Origin Access Control**, SigV4).
-- **CloudFront** (HTTPS `*.cloudfront.net`, PriceClass_100, cache optimisé).
-- **Basic Auth** : une **CloudFront Function** (`cloudfront-js-2.0`, `viewer-request`) compare l'en-tête `Authorization` à `base64("user:password")` lu dans un **KeyValueStore**. Changer le mot de passe = mettre à jour le KVS (`gallery password`), sans redéployer.
-- Décrit dans `src/bookphoto/aws/infra.yaml` (CloudFormation).
+## Architecture AWS (résumé)
+
+S3 **privé** (accès public bloqué, chiffré AES256, `BucketOwnerEnforced`) → **CloudFront** (HTTPS, HTTP/2+3, `PriceClass_100`) via **Origin Access Control**. Une **CloudFront Function** (`viewer-request`) lit la clé `auth` d'un **KeyValueStore** et applique le Basic Auth (`-` = public). Décrit dans [`src/bookphoto/aws/infra.yaml`](src/bookphoto/aws/infra.yaml). Détails et sécurité : [docs/architecture.md](docs/architecture.md).
+
+**Coût** : pas de compute (tout statique) ; les postes sont le stockage S3 et le transfert/requêtes CloudFront. Pour une estimation chiffrée selon ton trafic, utilise le [AWS Pricing Calculator](https://calculator.aws/).
 
 ## Tests
 
 ```bash
 uv run pytest
 ```
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE).
